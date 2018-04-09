@@ -1,0 +1,6 @@
+tf7/
+.vscode/
+.env
+checkpoints/
+
+*__pycache__*
