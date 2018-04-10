@@ -1,7 +1,8 @@
 tf7/
 data/
 .vscode/
-.env
 checkpoints/
+.env
 .DS_Store
 *__pycache__*
+*.pkl
