@@ -64,12 +64,21 @@ class HP(object):
 
     def __init__(
             self,
+            base_dir_name=None,
+            batch_size=128,
+            save_steps=1000,
+            summary_secs=1000,
             version='v1',
-            base_dir_name=None):
+    ):
         self.__str_no_k = set(['dir'])
         self.__str_no_v = set(['method', 'function'])
         self._path = ''
         self.version = version
+        self.save_steps = save_steps
+        self.summary_secs = summary_secs
+        self.batch_size = batch_size
+        self._max_sent_len = None
+        self._max_doc_len = None
         self.path_initialized = False
         self.now = datetime.datetime.now()
         self.id = None
@@ -113,7 +122,7 @@ class HP(object):
         }
         return d
 
-    def dump(self, name='', to="all"):
+    def dump(self, name='', to="json"):
         """Dumps the Hyperparameter as a pickle file in hp.dir as:
         <name> + _hp.pkl
 
@@ -147,6 +156,10 @@ class HP(object):
         if not self._path.exists():
             self._path.mkdir()
         self.path_initialized = True
+
+    def assign_new_dir(self):
+        self.path_initialized = False
+        self._path = self.dir
 
     @property
     def dir(self):
@@ -195,10 +208,20 @@ class HP(object):
 
         return self._path
 
+    @property
+    def max_sent_len(self):
+        if self._max_sent_len:
+            return self.max_sent_len
+        raise NotImplementedError('Set max_sent_len first')
 
-class MHP(HP):
-    pass
+    def set_max_sent_len(self, length):
+        self._max_sent_len = length
 
+    @property
+    def max_doc_len(self):
+        if self._max_doc_len:
+            return self.max_doc_len
+        raise NotImplementedError('Set max_doc_len first')
 
-class THP(HP):
-    pass
+    def set_max_doc_len(self, length):
+        self._max_doc_len = length
