@@ -66,6 +66,7 @@ class HP(object):
             self,
             base_dir_name=None,
             batch_size=128,
+            num_classes=69,
             save_steps=1000,
             summary_secs=1000,
             version='v1',
@@ -73,17 +74,22 @@ class HP(object):
         self.__str_no_k = set(['dir'])
         self.__str_no_v = set(['method', 'function'])
         self._path = ''
+        self.now = datetime.datetime.now()
+        self.base_dir_name = base_dir_name or str(self.now)[:10]
+
         self.version = version
         self.save_steps = save_steps
         self.summary_secs = summary_secs
         self.batch_size = batch_size
+        self.num_classes = num_classes
+
         self._max_sent_len = None
         self._max_doc_len = None
-        self.path_initialized = False
-        self.now = datetime.datetime.now()
-        self.id = None
+        self._vocab_size = None
+        self._embedding_dim = None
 
-        self.base_dir_name = base_dir_name or str(self.now)[:10]
+        self.path_initialized = False
+        self.id = None
 
     def __str__(self):
         """Returns a string representation of the Hyperparameter:
@@ -211,8 +217,8 @@ class HP(object):
     @property
     def max_sent_len(self):
         if self._max_sent_len:
-            return self.max_sent_len
-        raise NotImplementedError('Set max_sent_len first')
+            return self._max_sent_len
+        raise ValueError('Set max_sent_len first')
 
     def set_max_sent_len(self, length):
         self._max_sent_len = length
@@ -220,8 +226,37 @@ class HP(object):
     @property
     def max_doc_len(self):
         if self._max_doc_len:
-            return self.max_doc_len
-        raise NotImplementedError('Set max_doc_len first')
+            return self._max_doc_len
+        raise ValueError('Set max_doc_len first')
 
     def set_max_doc_len(self, length):
         self._max_doc_len = length
+
+    @property
+    def vocab_size(self):
+        if self._vocab_size:
+            return self._vocab_size
+        raise ValueError('Set vocab_size first')
+
+    def set_vocab_size(self, length):
+        self._vocab_size = length
+
+    @property
+    def embedding_dim(self):
+        if self._embedding_dim:
+            return self._embedding_dim
+        raise ValueError('Set embedding_dim first')
+
+    def set_embedding_dim(self, length):
+        self._embedding_dim = length
+
+    def set_data_values(
+            self,
+            doc_len,
+            sent_len,
+            vocab_size,
+            emb_dim):
+        self.set_embedding_dim(emb_dim)
+        self.set_max_doc_len(doc_len)
+        self.set_max_sent_len(sent_len)
+        self.set_vocab_size(vocab_size)
