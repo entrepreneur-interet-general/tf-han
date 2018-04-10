@@ -1,11 +1,22 @@
+from HAN import HAN
+from LogReg import LogReg
 import tensorflow as tf
 
 
 class Trainer(object):
-    def __init__(self, model, trainer_hp):
-        self.model = model
+    def __init__(self, trainer_hp, model_type, model=None, graph=None):
+
+        self.graph = graph or tf.Graph()
+        if model_type == 'LogReg':
+            self.model = LogReg(trainer_hp, self.graph)
+        elif model_type == 'HAN':
+            self.model = HAN()
+        elif model_type == 'reuse' and model:
+            self.model = model
+        else:
+            raise ValueError('Invalid model')
         self.hp = trainer_hp
-        
+
         self.global_step = tf.get_variable(
             'global_step',
             [],
@@ -24,6 +35,8 @@ class Trainer(object):
         pass
 
     def build(self):
+
+        self.model.build()
 
         self.train_op = tf.train.AdamOptimizer().minimize(
             self.model.loss,
