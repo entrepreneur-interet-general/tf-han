@@ -173,7 +173,7 @@ class HP(object):
             pathlib Path: The HP's directory
         """
         cwd = os.getcwd()
-        cpath = pathlib.Path(cwd)
+        cpath = pathlib.Path(cwd).parent
         ckpt_dir = cpath / 'checkpoints'
         path = ckpt_dir / self.version
         if not path.exists():
