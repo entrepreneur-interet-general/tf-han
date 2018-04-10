@@ -19,7 +19,7 @@ class Model(object):
             tf.float32,
             shape=(
                 self.hp.batch_size,
-                self.hp.max_doc_len
+                self.hp.max_doc_len,
                 self.hp.max_sent_len,
             )
         )
