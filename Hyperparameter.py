@@ -2,12 +2,33 @@ import os
 import pathlib
 import datetime
 import pickle as pkl
+import json
 
 
 class HP(object):
 
     @staticmethod
-    def load(path_to_HP):
+    def from_dict(dic):
+        h = HP()
+        for k, v in dic.items():
+            if k not in {'dir'}:
+                h.__setattr__(k, v)
+        h.set_dir(h._path)
+        return h
+
+    @staticmethod
+    def json_serial(obj):
+        try:
+            return json.dumps(obj)
+        except TypeError:
+            if isinstance(obj, datetime.datetime):
+                return obj.isoformat()
+            if isinstance(obj, pathlib.Path):
+                return str(obj)
+            raise TypeError("Type %s not serializable" % type(obj))
+
+    @staticmethod
+    def load(path_to_HP, file_type="pickle"):
         """Static method: returns a HP object, located at path_to_HP.
         If path_to_HP is a directory, will return the first .pkl file
 
@@ -18,17 +39,27 @@ class HP(object):
             [type]: [description]
         """
         path = pathlib.Path(path_to_HP)
+        to = file_type if file_type in["pickle", "json"] else "pickle"
+        if to == "pickle":
+            ext = '.pkl'
+        else:
+            ext = '.json'
+
         if path.is_dir():
             files = [
                 f for f in path.iterdir()
-                if '.pkl' in str(f)
+                if ext in str(f)
             ]
-            print(files)
             if not files:
-                raise FileNotFoundError('No .pkl file in provided path')
+                raise FileNotFoundError('No %s file in provided path' % ext)
             path = files[0]
-        with path.open('rb') as f:
-            hp = pkl.load(f)
+        if to == "pickle":
+            with path.open('rb') as f:
+                hp = pkl.load(f)
+        else:
+            with path.open('r') as f:
+                jhp = json.load(f)
+            hp = HP.from_dict(jhp)
         return hp
 
     def __init__(
@@ -64,19 +95,46 @@ class HP(object):
         )
 
     def __repr__(self):
+        """Class name and id are enough to represent a hyper parameter
+
+        Returns:
+            str: <<classname> self.id>
+        """
         return '<%s %s>' % (self.__class__, self.id)
 
-    def save(self, name=''):
+    def safe_dict(self):
+        d = {
+            k: self.__getattribute__(k)
+            for k in dir(self)
+            if '__' not in k and
+            k not in self.__str_no_k and
+            not any(v in str(self.__getattribute__(k))
+                    for v in self.__str_no_v)
+        }
+        return d
+
+    def dump(self, name='', to="all"):
         """Dumps the Hyperparameter as a pickle file in hp.dir as:
         <name> + _hp.pkl
 
             name (str, optional): Defaults to ''. details to add to the
             default filename
         """
-        file_name = '%s_hp.pkl' % name
-        location = self.dir / file_name
-        with location.open('wb') as f:
-            pkl.dump(self, f)
+        to = to if to in["pickle", "json", "all"] else "pickle"
+        if to in ["pickle", "all"]:
+            ext = '.pkl'
+            file_name = '%s_hp%s' % (name, ext)
+            location = self.dir / file_name
+            with location.open('wb') as f:
+                pkl.dump(self, f)
+            if to == "all":
+                to = "json"
+        if to == "json":
+            ext = '.json'
+            file_name = '%s_hp%s' % (name, ext)
+            location = self.dir / file_name
+            with location.open('w') as f:
+                json.dump(self.safe_dict(), f, default=self.json_serial)
 
     def set_dir(self, path):
         """Set the HP's directory: hp.dir
@@ -112,13 +170,12 @@ class HP(object):
             paths = [
                 p.resolve() for p in path.iterdir()
                 if p.is_dir() and
-                self.base_dir_name in str(p) and
-                '_' in str(p)
+                self.base_dir_name in str(p)
             ]
             if paths:
                 _id = max(
                     [0] + [
-                        int(str(p).split("_")[-1])
+                        int(str(p).split("_")[-1] if '_' in str(p) else "0")
                         for p in paths]
                 ) + 1
                 new_name = self.base_dir_name + '_%d' % _id
