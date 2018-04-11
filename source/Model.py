@@ -6,26 +6,11 @@ class Model(object):
         self.hp = hp
         self.loss = None
         self.logits = None
+        self.prediction = None
+        self.input_tensor = None
+        self.labels_tensor = None
 
         self.graph = graph or tf.Graph()
-        with self.graph.as_default():
-            self.output_labels = tf.placeholder(
-                tf.float32,
-                shape=(
-                    self.hp.batch_size,
-                    self.hp.num_classes
-                ),
-                name="output_labels"
-            )
-            self.input_layer = tf.placeholder(
-                tf.int32,
-                shape=(
-                    self.hp.batch_size,
-                    self.hp.max_doc_len,
-                    self.hp.max_sent_len,
-                ),
-                name='input_layer'
-            )
 
     def set_logits(self):
         raise NotImplementedError('set_logits should be implemented')
@@ -37,11 +22,13 @@ class Model(object):
         self.loss = tf.reduce_mean(
             tf.nn.sigmoid_cross_entropy_with_logits(
                 logits=self.logits,
-                labels=self.output_labels,
+                labels=self.labels_tensor,
                 name='sig-xent'),
             name="mean-sig-xent")
 
-    def build(self):
+    def build(self, input_tensor, labels_tensor):
+        self.input_tensor = input_tensor
+        self.labels_tensor = tf.cast(labels_tensor, tf.float32)
         with self.graph.as_default():
             self.set_embedding_matrix()
             self.set_logits()

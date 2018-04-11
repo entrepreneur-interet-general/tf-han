@@ -66,9 +66,12 @@ class HP(object):
             self,
             base_dir_name=None,
             batch_size=128,
+            epochs=3,
             num_classes=69,
             save_steps=1000,
             summary_secs=1000,
+            test_data_path='../data/toy/test',
+            train_data_path='../data/toy',
             version='v1',
     ):
         self.__str_no_k = set(['dir'])
@@ -82,6 +85,9 @@ class HP(object):
         self.summary_secs = summary_secs
         self.batch_size = batch_size
         self.num_classes = num_classes
+        self.epochs = epochs
+        self.test_data_path = test_data_path
+        self.train_data_path = train_data_path
 
         self._max_sent_len = None
         self._max_doc_len = None
@@ -113,9 +119,9 @@ class HP(object):
         """Class name and id are enough to represent a hyper parameter
 
         Returns:
-            str: <<classname> self.id>
+            str: <<classname> self.id self.now>
         """
-        return '<%s %s>' % (self.__class__, self.id)
+        return '<%s %s %s>' % (self.__class__, self.id, self.now)
 
     def safe_dict(self):
         d = {

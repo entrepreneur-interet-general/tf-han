@@ -14,7 +14,8 @@ class LogReg(Model):
         self.embedded_inputs = None
         self.mean_vector = None
         self.max_vector = None
-        self.input_vector = None
+        self.logReg_vector = None
+        print(repr(self.hp))
 
     def set_embedding_matrix(self):
         self.embedding_matrix = tf.get_variable(
@@ -27,7 +28,7 @@ class LogReg(Model):
     def set_logits(self):
         self.embedded_inputs = tf.nn.embedding_lookup(
             self.embedding_matrix,
-            self.input_layer
+            self.input_tensor
         )  # batch x doc x sentence x embedding
         self.mean_vector = tf.reduce_mean(
             tf.reduce_mean(
@@ -38,9 +39,8 @@ class LogReg(Model):
         )  # batch x embedding
 
         flat_vector = tf.reshape(self.embedded_inputs, shape=(
-            self.embedded_inputs.shape[0],
-            self.embedded_inputs.shape[1] * self.embedded_inputs.shape[2],
-            self.embedded_inputs.shape[3],
+            tf.shape(self.embedded_inputs)[0], -1,
+            tf.shape(self.embedded_inputs)[3]
         ))  # batch x sent*doc x embedding
 
         l2_embeddings = tf.norm(flat_vector, axis=2)  # batch x sent*doc
@@ -51,13 +51,17 @@ class LogReg(Model):
         self.max_vector = tf.gather_nd(
             flat_vector, indexes)  # batch x embedding
 
-        self.input_vector = tf.concat(
-            [self.mean_vector, self.max_vector],
-            axis=1
+        self.logReg_vector = tf.reshape(
+            tf.concat(
+                [self.mean_vector, self.max_vector],
+                axis=1
+            ), shape=(-1, 2*self.hp.embedding_dim)
         )  # batch x 2*embedding
 
         self.logits = tf.layers.dense(
-            self.input_vector,
+            self.logReg_vector,
             self.hp.num_classes,
             kernel_initializer=tf.initializers.truncated_normal
         )
+
+        self.prediction = tf.nn.sigmoid(self.logits)
