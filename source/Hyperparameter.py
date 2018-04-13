@@ -72,6 +72,7 @@ class HP(object):
             summary_secs=1000,
             test_data_path='../data/toy/test',
             train_data_path='../data/toy',
+            val_every=100,
             version='v1',
     ):
         self.__str_no_k = set(['dir'])
@@ -88,6 +89,7 @@ class HP(object):
         self.epochs = epochs
         self.test_data_path = test_data_path
         self.train_data_path = train_data_path
+        self.val_every = val_every
 
         self._max_sent_len = None
         self._max_doc_len = None
