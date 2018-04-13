@@ -1,5 +1,6 @@
 from pathlib import Path
 import pickle
+import numpy as np
 
 
 class Processer(object):
@@ -32,6 +33,8 @@ class Processer(object):
         self.end_of_sentences = ['.', '!', '?']
         self.embedded_data = None
         self.vocab = None
+        self.labels = None
+        self.features = None
 
     def assert_data(self):
         if not self.data:
@@ -48,6 +51,9 @@ class Processer(object):
                 if not fp.is_dir() and fp.suffix == '.txt':
                     with fp.open('r') as f:
                         data += f.readlines()
+                if not fp.is_dir() and fp.suffix == '.pkl':
+                    with fp.open('rb') as f:
+                        self.labels = pickle.load(f)
             self.data = [l for l in ''.join(data).split('\n\n') if len(l) > 1]
 
     def delete_stop_words(self):
@@ -64,13 +70,14 @@ class Processer(object):
         self.data = [[' '.join(w.split())
                       for w in s.split('@@@') if w] for s in self.data]
 
-    def embed(self, data, vocabulary=None, max_size=1e6, max_sent_len=None):
+    def embed(self, data, vocabulary=None, max_size=1e6,
+              max_sent_len=None,
+              max_doc_len=None):
         self.assert_data()
 
-        if max_sent_len:
-            max_doc_len, _ = self.get_maxs(data)
-        else:
+        if not max_sent_len and not max_doc_len:
             max_doc_len, max_sent_len = self.get_maxs(data)
+
         if not vocabulary:
             self.max_doc_len = max_doc_len
             self.max_sent_len = max_sent_len
@@ -84,7 +91,7 @@ class Processer(object):
         embedded_data = [
             [
                 [0 for w in range(max_sent_len)]
-                for s in d
+                for s in range(max_doc_len)
             ]
             for d in self.data
         ]
@@ -126,6 +133,7 @@ class Processer(object):
                 save_path='',
                 vocabulary=None,
                 max_sent_len=None,
+                max_doc_len=None,
                 max_size=1e6):
 
         self.load_data(data_path)
@@ -135,7 +143,9 @@ class Processer(object):
             self.data,
             vocabulary=vocabulary,
             max_size=max_size,
-            max_sent_len=max_sent_len
+            max_sent_len=max_sent_len,
+            max_doc_len=max_doc_len
         )
+        self.features = np.array(self.embedded_data)
         if save_path:
             self.save(save_path)
