@@ -5,19 +5,31 @@ import tensorflow as tf
 class LogReg(Model):
 
     """
-        Baseline Logistic Regression Model
+        Baseline Logistic Regression Model. Inputs to the
+        regression are computed over each document:
+        [mean_embedding, max_embedding]
+        max is according l2 norm
     """
 
     def __init__(self, hp, graph=None):
+        """Logistic Regression model
+
+        Args:
+            hp (Hyperparameter): model's params
+            graph (tf.Graph, optional): Defaults to None.
+                If none is provided, a new one is created
+        """
         super().__init__(hp, graph)
 
         self.embedded_inputs = None
         self.mean_vector = None
         self.max_vector = None
         self.logReg_vector = None
-        print(repr(self.hp))
+        self.embedding_matrix = None
 
     def set_embedding_matrix(self):
+        """Creates a random trainable embedding matrix
+        """
         self.embedding_matrix = tf.get_variable(
             'embedding_matrix',
             shape=(self.hp.vocab_size, self.hp.embedding_dim),
@@ -26,6 +38,18 @@ class LogReg(Model):
         )
 
     def set_logits(self):
+        """Computes the output logits:
+            * Embed inputs (indexes of words per sentence per document)
+            * Compute mean vector
+            * Compute max vector
+            * Concatenate them
+            * Input them in a dense layer
+            * Create the prediction by applying a sigmoid
+
+        Applying a sigmoid and not a softmax acts like independant regressions.
+
+        (logits = output of a dense layer without activation)
+        """
         self.embedded_inputs = tf.nn.embedding_lookup(
             self.embedding_matrix,
             self.input_tensor
