@@ -81,7 +81,6 @@ class Processer(object):
         if not vocabulary:
             self.max_doc_len = max_doc_len
             self.max_sent_len = max_sent_len
-        print('Proc', self.max_doc_len, self.max_sent_len)
 
         vocab = vocabulary or {
             '<PAD>': 0,

@@ -19,17 +19,20 @@ class Model(object):
         raise NotImplementedError('set_embedding_matrix should be implemented')
 
     def set_loss(self):
-        self.loss = tf.reduce_mean(
-            tf.nn.sigmoid_cross_entropy_with_logits(
-                logits=self.logits,
-                labels=self.labels_tensor,
-                name='sig-xent'),
-            name="mean-sig-xent")
+        with self.graph.as_default():
+            with tf.name_scope('loss'):
+                self.loss = tf.reduce_mean(
+                    tf.nn.sigmoid_cross_entropy_with_logits(
+                        logits=self.logits,
+                        labels=self.labels_tensor,
+                        name='sig-xent'),
+                    name="mean-sig-xent")
 
     def build(self, input_tensor, labels_tensor):
-        self.input_tensor = input_tensor
-        self.labels_tensor = tf.cast(labels_tensor, tf.float32)
         with self.graph.as_default():
-            self.set_embedding_matrix()
-            self.set_logits()
-            self.set_loss()
+            with tf.name_scope('model'):
+                self.input_tensor = input_tensor
+                self.labels_tensor = tf.cast(labels_tensor, tf.float32)
+                self.set_embedding_matrix()
+                self.set_logits()
+                self.set_loss()
