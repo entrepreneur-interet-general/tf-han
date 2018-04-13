@@ -45,14 +45,16 @@ class Trainer(object):
         self.summary_hook = None
         self.saver_hook = None
         self.train_op = None
-        self.dataset = None
         self.features_data_ph = None
         self.labels_data_ph = None
-        self.iterator = None
-        self.dataset = None
+        self.val_iterator = None
+        self.val_dataset = None
+        self.train_iterator = None
+        self.train_dataset = None
         self.input_tensor = None
         self.labels_tensor = None
         self.sess = None
+        self.y_pred = None
 
         with self.graph.as_default():
             self.global_step = tf.get_variable(
@@ -63,6 +65,7 @@ class Trainer(object):
                 trainable=False
             )
             self.batch_size_ph = tf.placeholder(tf.int64)
+            self.val_ph = tf.placeholder(tf.bool, name='val_ph')
 
     def read_data(self):
         pass
@@ -80,18 +83,31 @@ class Trainer(object):
                 'labels_data_ph'
             )
 
-            self.dataset = tf.data.Dataset.from_tensor_slices(
+            self.train_dataset = tf.data.Dataset.from_tensor_slices(
                 (self.features_data_ph, self.labels_data_ph)
             )
-            self.dataset = self.dataset.shuffle(buffer_size=100000)
-            self.dataset = self.dataset.batch(self.batch_size_ph)
-            self.iterator = self.dataset.make_initializable_iterator()
+            self.train_dataset = self.train_dataset.shuffle(buffer_size=100000)
+            self.train_dataset = self.train_dataset.batch(self.batch_size_ph)
+            self.train_iterator = \
+                self.train_dataset.make_initializable_iterator()
 
-            self.input_tensor, self.labels_tensor = self.iterator.get_next()
+            self.val_dataset = tf.data.Dataset.from_tensor_slices(
+                (self.features_data_ph, self.labels_data_ph)
+            )
+            self.val_dataset = self.val_dataset.shuffle(buffer_size=100000)
+            self.val_dataset = self.val_dataset.batch(self.batch_size_ph)
+            self.val_iterator = \
+                self.val_dataset.make_initializable_iterator()
+
+            self.input_tensor, self.labels_tensor = tf.cond(
+                self.val_ph,
+                self.val_iterator.get_next,
+                self.train_iterator.get_next
+            )
 
     def build(self):
         with self.graph.as_default():
-            if self.dataset is None:
+            if self.train_dataset is None:
                 raise ValueError('Run make_datasets() first!')
 
             self.model.build(self.input_tensor, self.labels_tensor)
@@ -101,38 +117,40 @@ class Trainer(object):
                 global_step=self.global_step
             )
 
-            tf.summary.scalar("loss", self.model.loss)
+            tf.summary.scalar("LLoss", self.model.loss)
 
-            self.server = tf.train.Server.create_local_server()
+            tf.summary.FileWriter(
+                str(self.hp.dir / 'tensorboard'), self.graph)
             self.summary_op = tf.summary.merge_all()
-            self.summary_hook = tf.train.SummarySaverHook(
-                save_secs=self.hp.summary_secs,
-                output_dir=str(self.hp.dir),
-                summary_op=self.summary_op)
-            self.saver_hook = tf.train.CheckpointSaverHook(
-                checkpoint_dir=self.hp.dir,
-                save_steps=self.hp.save_steps,
-            )
 
-    def initialize_iterators(self, is_test=False):
+    def initialize_iterators(self, is_val=False):
         with self.graph.as_default():
-            if is_test:
+            if is_val:
                 feats = self.test_proc.features
                 labs = self.test_proc.labels
                 bs = len(feats)
+                self.sess.run(
+                    self.val_iterator.initializer,
+                    feed_dict={
+                        self.val_ph: True,
+                        self.features_data_ph: feats,
+                        self.labels_data_ph: labs,
+                        self.batch_size_ph: bs
+                    }
+                )
             else:
                 feats = self.train_proc.features
                 labs = self.train_proc.labels
                 bs = self.hp.batch_size
-
-            self.sess.run(
-                self.iterator.initializer,
-                feed_dict={
-                    self.features_data_ph: feats,
-                    self.labels_data_ph: labs,
-                    self.batch_size_ph: bs
-                }
-            )
+                self.sess.run(
+                    self.train_iterator.initializer,
+                    feed_dict={
+                        self.val_ph: False,
+                        self.features_data_ph: feats,
+                        self.labels_data_ph: labs,
+                        self.batch_size_ph: bs
+                    }
+                )
 
     def prepare(self):
         print('Setting Processers...')
@@ -143,7 +161,8 @@ class Trainer(object):
             self.test_proc.process(
                 data_path=self.hp.test_data_path,
                 vocabulary=self.train_proc.vocab,
-                max_sent_len=self.train_proc.max_sent_len
+                max_sent_len=self.train_proc.max_sent_len,
+                max_doc_len=self.train_proc.max_doc_len
             )
 
         self.hp.set_data_values(
@@ -163,31 +182,48 @@ class Trainer(object):
         self.make_datasets()
         print('Ok. Building graph...')
         self.build()
+
         print('Ok.')
 
     def train(self):
         with self.graph.as_default():
             self.prepare()
-            with tf.train.MonitoredTrainingSession(
-                    hooks=[self.summary_hook, self.saver_hook]) as self.sess:
-
-                self.initialize_iterators(is_test=False)
+            with tf.Session() as sess:
+                self.sess = sess
+                tf.global_variables_initializer().run(session=self.sess)
                 for epoch in range(self.hp.epochs):
-                    print('## EPOCH %d' % epoch)
-                    while not self.sess.should_stop():
-
-                        _, loss, glob_step = self.sess.run([
-                            self.train_op,
-                            self.model.loss,
-                            self.global_step
-                        ])
-
-                        print(loss)
-
-                        if glob_step and glob_step % 100 == 0:
-                            print('> Step %d' % glob_step)
-                            self.initialize_iterators(is_test=True)
-                            y_pred = self.sess.run(
-                                self.model.prediction
+                    self.initialize_iterators(is_val=False)
+                    print('\n')
+                    stop = False
+                    while True:
+                        epoch_string = '## EPOCH %d / %d' % (
+                            epoch + 1, self.hp.epochs)
+                        try:
+                            _, loss, glob_step = self.sess.run(
+                                [
+                                    self.train_op,
+                                    self.model.loss,
+                                    self.global_step,
+                                ],
+                                feed_dict={self.val_ph: False}
                             )
-                            self.initialize_iterators(is_test=False)
+
+                            epoch_string += 'Step %d Loss:  %f' % (
+                                glob_step, loss)
+
+                            if glob_step and glob_step % 20 == 0:
+                                epoch_string += ' | Validation at Step %d:' % glob_step
+                                self.initialize_iterators(is_val=True)
+                                self.y_pred = self.sess.run(
+                                    self.model.prediction,
+                                    feed_dict={self.val_ph: True}
+                                )
+                                epoch_string += str((self.y_pred > 0.5).sum(1))
+                                epoch_string += '\n'
+
+                        except tf.errors.OutOfRangeError:
+                            stop = True
+                        finally:
+                            print(epoch_string, end='\r')
+                            if stop:
+                                break
