@@ -9,7 +9,7 @@ class Trainer(object):
 
     @staticmethod
     def f1_score(y_true, y_pred):
-        """Computes 3 different f1 scores, micro macro 
+        """Computes 3 different f1 scores, micro macro
         weighted.
         micro: f1 score accross the classes, as 1
         macro: mean of f1 scores per class
@@ -22,7 +22,7 @@ class Trainer(object):
             y_pred (Tensor): model's predictions, same shape as y_true
 
         Returns:
-            tupe(Tensor): (micro, macro, weighted) 
+            tupe(Tensor): (micro, macro, weighted)
                           tuple of the computed f1 scores
         """
 
@@ -214,7 +214,7 @@ class Trainer(object):
                 str(self.hp.dir / 'tensorboard' / 'test'))
 
     def initialize_iterators(self, is_val=False):
-        """Initializes the train and validation iterators from 
+        """Initializes the train and validation iterators from
         the Processers' data
 
             is_val (bool, optional): Defaults to False. Whether to initialize
