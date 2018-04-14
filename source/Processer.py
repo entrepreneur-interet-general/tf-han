@@ -16,7 +16,7 @@ class Processer(object):
         which are lists of words
 
         Returns:
-            tuple(int): max number of sentences in a doc, 
+            tuple(int): max number of sentences in a doc,
             max number of words in a sentence
         """
         max_doc_len = max(
