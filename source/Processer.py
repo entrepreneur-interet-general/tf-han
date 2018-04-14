@@ -6,6 +6,19 @@ import numpy as np
 class Processer(object):
     @staticmethod
     def get_maxs(data):
+        """Computes the longest sentence and the longest doc
+        for data as a list of documents which are lists of sententences
+        which are lists of words
+
+        Args:
+            object (list(list(list(str)))): list of documents which are lists
+            of sententences
+        which are lists of words
+
+        Returns:
+            tuple(int): max number of sentences in a doc, 
+            max number of words in a sentence
+        """
         max_doc_len = max(
             len(d) for d in data
         )
@@ -16,6 +29,15 @@ class Processer(object):
 
     @staticmethod
     def load(path):
+        """Loads a previously saved Processer
+
+        Args:
+            path (pathlib.Path or str): path of the pickle file
+
+        Returns:
+            Processer: loaded processer without its data attribute
+            (to save disk space)
+        """
         path = Path(path)
         with path.open('rb') as f:
             print(
@@ -24,6 +46,8 @@ class Processer(object):
             return pickle.load(f)
 
     def __init__(self):
+        """Processer constructor
+        """
         self.vocab_size = None
         self.max_sent_len = None
         self.max_doc_len = None
@@ -37,10 +61,24 @@ class Processer(object):
         self.features = None
 
     def assert_data(self):
+        """Checks that the Processer has a data attribute
+
+        Raises:
+            ValueError: if the Processer does not have data
+        """
         if not self.data:
             raise ValueError('No data in the Processer')
 
     def load_data(self, data_path):
+        """Can load different types of data:
+        * toy: to experiment
+
+        Others could be implemented.
+        Sets the Processer's data attribute.
+
+        Args:
+            data_path (str or pathlib.Path): where to find the data
+        """
         data = []
         if 'toy' in str(data_path).split('/'):
             path = Path().resolve()
@@ -57,6 +95,8 @@ class Processer(object):
             self.data = [l for l in ''.join(data).split('\n\n') if len(l) > 1]
 
     def delete_stop_words(self):
+        """Lowers words in the data and ignores those in self.stop_words
+        """
         self.assert_data()
         temp = self.data
         for w in self.stop_words:
@@ -64,6 +104,9 @@ class Processer(object):
         self.data = temp
 
     def split_sentences(self):
+        """Splits a text into sentences according to the tokens in
+        self.end_of_sentences
+        """
         self.assert_data()
         for token in self.end_of_sentences:
             self.data = [s.replace(token, ' %s@@@' % token) for s in self.data]
@@ -73,6 +116,30 @@ class Processer(object):
     def embed(self, data, vocabulary=None, max_size=1e6,
               max_sent_len=None,
               max_doc_len=None):
+        """Embeds self.data according to vocabulary. If none is provided,
+        it is created on the fly and added to self.vocab
+
+        Sets self.embdedded_data as a numpy array of shape:
+        number of docs * max_doc_len * max_sent_len
+
+        Sentences are padded with 0s and Documents are padded with sentences
+        full of zeros [0] * max_sent_len
+
+        Args:
+            data (list(list(list(str)))): list of documents as lists
+            of sentences as lists of words
+            vocabulary (dict, optional): Defaults to None. The vocabulary to
+            embed the sentences from as {word: index}.
+            If None, a new one is created.
+            max_size (number, optional): Defaults to 1e6. max length of the
+            vocabulary
+            max_sent_len (int, optional): Defaults to None. Max allowed
+            length of sentences. If None, it's computed from data
+            max_doc_len (int, optional): Defaults to None. idem for documents
+
+        Returns:
+            [type]: [description]
+        """
         self.assert_data()
 
         if not max_sent_len and not max_doc_len:
@@ -118,6 +185,12 @@ class Processer(object):
         return embedded_data
 
     def save(self, save_path):
+        """Dumps the Processer without its
+        data attribute to save disk
+
+        Args:
+            save_path (str or pathlib.Path): [description]
+        """
         path = Path(save_path).resolve()
         if path.is_dir():
             path /= 'processer.pkl'
@@ -134,6 +207,24 @@ class Processer(object):
                 max_sent_len=None,
                 max_doc_len=None,
                 max_size=1e6):
+        """Main funciton executing the major processing
+        steps for the data:
+        * load the data
+        * delete stop words
+        * split text into sentences
+        * embed resulting data
+        * creates a features attribute from it
+
+            data_path (str, optional): Defaults to '../data/toy'. 
+                path where to find the data
+            save_path (str, optional): Defaults to ''.
+                path where to save the processer
+            vocabulary (dict, optional): Defaults to None.
+                vocabulary to embed the data
+            max_sent_len (int, optional): Defaults to None. see embed
+            max_doc_len (int, optional): Defaults to None. see embed
+            max_size (number, optional): Defaults to 1e6. see embed
+        """
 
         self.load_data(data_path)
         self.delete_stop_words()
