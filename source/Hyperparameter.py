@@ -70,6 +70,7 @@ class HP(object):
             num_classes=69,
             save_steps=1000,
             summary_secs=1000,
+            trainable_embedding_matrix=False,
             test_data_path='../data/toy/test',
             train_data_path='../data/toy',
             val_every=100,
@@ -90,6 +91,7 @@ class HP(object):
         self.test_data_path = test_data_path
         self.train_data_path = train_data_path
         self.val_every = val_every
+        self.trainable_embedding_matrix = trainable_embedding_matrix
 
         self._max_sent_len = None
         self._max_doc_len = None

@@ -3,10 +3,29 @@ from LogReg import LogReg
 from Processer import Processer
 import tensorflow as tf
 from pathlib import Path
+from time import time
+import shutil
+
+
+def strtime(ref):
+    """Formats a string as the difference between a reference time
+    and the current time
+
+    Args:
+        ref (float): reference time
+
+    Returns:
+        str: h:m:s from time() - ref
+    """
+    td = int(time() - ref)
+    m, s = divmod(td, 60)
+    h, m = divmod(m, 60)
+    return "{:2}:{:2}:{:2}".format(
+        h, m, s
+    ).replace(' ', '0')
 
 
 class Trainer(object):
-
     @staticmethod
     def f1_score(y_true, y_pred):
         """Computes 3 different f1 scores, micro macro
@@ -119,6 +138,7 @@ class Trainer(object):
         self.val_writer = None
         self.global_step_var = None
         self.global_step = None
+        self.train_start_time = None
 
         with self.graph.as_default():
             self.global_step_var = tf.get_variable(
@@ -130,6 +150,11 @@ class Trainer(object):
             )
             self.batch_size_ph = tf.placeholder(tf.int64)
             self.val_ph = tf.placeholder(tf.bool, name='val_ph')
+            self.keep_prob_dropout_ph = tf.placeholder(
+                tf.float32, name='keep_prob_dropout_ph'
+            )
+            self.model.val_ph = self.val_ph
+            self.model.keep_prob_dropout_ph = self.keep_prob_dropout_ph
 
     def make_datasets(self):
         """Creates 2 datasets, one to train the other to validate the model.
@@ -213,6 +238,15 @@ class Trainer(object):
             self.val_writer = tf.summary.FileWriter(
                 str(self.hp.dir / 'tensorboard' / 'test'))
 
+    def delete(self, ask=True):
+        """Delete the trainer's directory after asking for confiirmation
+
+            ask (bool, optional): Defaults to True.
+            Whether to ask for confirmation
+        """
+        if not ask or 'y' in input('Are you sure? (y/n)'):
+            shutil.rmtree(self.hp.dir)
+
     def initialize_iterators(self, is_val=False):
         """Initializes the train and validation iterators from
         the Processers' data
@@ -286,9 +320,12 @@ class Trainer(object):
         self.build()
         print('Ok. Training.\n')
 
-    def validate(self):
+    def validate(self, force=False):
         """Runs a validation step according to the current
         global_step, i.e. if step % hp.val_every == 0
+
+        force (bool, optional): Defaults to False. Whether
+            or not to force validation regarless of global_step
 
         Returns:
             str: Information to print
@@ -296,7 +333,7 @@ class Trainer(object):
         if self.global_step == 0:
             return ''
 
-        if self.global_step % self.hp.val_every != 0:
+        if not force and self.global_step % self.hp.val_every != 0:
             return ''
 
         self.initialize_iterators(is_val=True)
@@ -327,6 +364,7 @@ class Trainer(object):
                 * print status
         """
         epoch_string = ""
+        self.train_start_time = time()
         with self.graph.as_default():
             self.prepare()
             tf.global_variables_initializer().run(session=self.sess)
@@ -352,9 +390,10 @@ class Trainer(object):
                         self.train_writer.flush()
 
                         val_string = self.validate()
-                        epoch_string = "## EPOCH {:3} / {:3} "
+                        epoch_string = "[{}] EPOCH {:3} / {:3} "
                         epoch_string += "Step {:5} Loss: {:.3f} {}"
                         epoch_string = epoch_string.format(
+                            strtime(self.train_start_time),
                             epoch + 1, self.hp.epochs, self.global_step,
                             loss, val_string
                         )
@@ -365,3 +404,41 @@ class Trainer(object):
                         print(epoch_string, end='\r')
                         if stop:
                             break
+            # End of epochs
+            if self.global_step % self.hp.val_every != 0:
+                print('\n[{}] Finally {}'.format(
+                    strtime(self.train_start_time),
+                    self.validate(True)
+                ))
+
+
+if __name__ == '__main__':
+    import Processer as proc
+    import Hyperparameter as hyp
+    import Model as mod
+    import LogReg as lr
+
+    from importlib import reload
+
+    reload(proc)
+    reload(hyp)
+    reload(mod)
+    reload(lr)
+
+    tf.reset_default_graph()
+    hp = hyp.HP(
+        batch_size=10,
+        epochs=40,
+        val_every=100
+    )
+
+    trainer = Trainer(
+        hp, 'LogReg'
+    )
+    try:
+        trainer.train()
+    except KeyboardInterrupt:
+        pass
+
+    if 'y' in input('\nDone. delete?'):
+        trainer.delete(False)

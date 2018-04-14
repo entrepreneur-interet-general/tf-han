@@ -28,6 +28,22 @@ class Processer(object):
         return max_doc_len, max_sent_len
 
     @staticmethod
+    def get_lengths(data):
+        """Get lengths to feed to a dynamic_rnn
+
+        Args:
+            data (list(list(list(str)))): data as lsit of docs
+            as lists of sentences as lists of words
+
+        Returns:
+            tuple(list): list of document lengths, list of sentence 
+            lengths per document
+        """
+        doc_lengths = [len(d) for d in data]
+        sent_lengths = [[len(s) for s in d] for d in data]
+        return doc_lengths, sent_lengths
+
+    @staticmethod
     def load(path):
         """Loads a previously saved Processer
 
@@ -59,6 +75,8 @@ class Processer(object):
         self.vocab = None
         self.labels = None
         self.features = None
+        self.doc_lengths = None
+        self.sent_lengths = None
 
     def assert_data(self):
         """Checks that the Processer has a data attribute
@@ -236,6 +254,7 @@ class Processer(object):
             max_sent_len=max_sent_len,
             max_doc_len=max_doc_len
         )
+        self.doc_lengths, self.sent_lengths = self.get_lengths(self.data)
         self.features = np.array(self.embedded_data)
         if save_path:
             self.save(save_path)
