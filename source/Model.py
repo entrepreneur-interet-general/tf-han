@@ -44,9 +44,12 @@ class Model(object):
         """
         raise NotImplementedError('set_logits should be implemented')
 
-    def set_embedding_matrix(self):
+    def set_embedding_matrix(self, emb_matrix=None):
         """Should define how the model will lookup the indexes
         it will get as inputs.
+
+        emb_matrix (np.array, optional): Defaults to None. Embedding matrix
+        of shape nb_words x embedding_dim
 
         Raises:
             NotImplementedError: Abstract method
@@ -67,7 +70,7 @@ class Model(object):
                         name='sig-xent'),
                     name="mean-sig-xent")
 
-    def build(self, input_tensor, labels_tensor):
+    def build(self, input_tensor, labels_tensor, emb_matrix=None):
         """Computes the major operations to create a model:
         * set_embedding_matrix
         * set_logits
@@ -81,6 +84,6 @@ class Model(object):
             with tf.name_scope('model'):
                 self.input_tensor = input_tensor
                 self.labels_tensor = tf.cast(labels_tensor, tf.float32)
-                self.set_embedding_matrix()
+                self.set_embedding_matrix(emb_matrix)
                 self.set_logits()
                 self.set_loss()

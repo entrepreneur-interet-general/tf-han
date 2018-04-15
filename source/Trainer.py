@@ -96,11 +96,12 @@ class Trainer(object):
         """
         self.graph = graph or tf.Graph()
         self.sess = sess or tf.Session(graph=self.graph)
+        self.prepared = False
 
         if model_type == 'LogReg':
             self.model = LogReg(trainer_hp, self.graph)
         elif model_type == 'HAN':
-            self.model = HAN()
+            self.model = HAN(trainer_hp, self.graph)
         elif model_type == 'reuse' and model:
             self.model = model
         else:
@@ -110,7 +111,9 @@ class Trainer(object):
         self.new_procs = True
         if processers:
             assert isinstance(processers, list)
-            if isinstance(processers[0], Processer):
+            assert len(processers) == 2
+
+            if isinstance(processers[0], proc.Processer):
                 self.train_proc, self.test_proc = processers
             else:
                 processers = [Path(p) for p in processers]
@@ -155,6 +158,46 @@ class Trainer(object):
             )
             self.model.val_ph = self.val_ph
             self.model.keep_prob_dropout_ph = self.keep_prob_dropout_ph
+
+    def delete(self, ask=True):
+        """Delete the trainer's directory after asking for confiirmation
+
+            ask (bool, optional): Defaults to True.
+            Whether to ask for confirmation
+        """
+        if not ask or 'y' in input('Are you sure? (y/n)'):
+            shutil.rmtree(self.hp.dir)
+
+    def set_procs(self):
+        voc = None
+        if self.hp.embedding_file:
+            voc, mat = self.train_proc.build_word_vector_matrix(
+                self.hp.embedding_file, self.hp.max_words
+            )
+            self.train_proc.np_embedding_matrix = mat
+            voc = {
+                k: v + 2 for k, v in voc.items()
+            }
+            voc['<PAD>'] = 0
+            voc['<OOV>'] = 1
+            self.train_proc.vocab = voc
+
+        self.train_proc.process(
+            data_path=self.hp.train_data_path,
+            vocabulary=voc
+        )
+        self.test_proc.process(
+            data_path=self.hp.test_data_path,
+            vocabulary=self.train_proc.vocab,
+            max_sent_len=self.train_proc.max_sent_len,
+            max_doc_len=self.train_proc.max_doc_len
+        )
+
+    def save_procs(self, path=None):
+        path = path or self.hp.dir
+        path = Path(path)
+        self.train_proc.save(path / 'train_proc.pkl')
+        self.test_proc.save(path / 'test_proc.pkl')
 
     def make_datasets(self):
         """Creates 2 datasets, one to train the other to validate the model.
@@ -213,7 +256,9 @@ class Trainer(object):
         with self.graph.as_default():
             if self.train_dataset is None:
                 raise ValueError('Run make_datasets() first!')
-            self.model.build(self.input_tensor, self.labels_tensor)
+
+            self.model.build(self.input_tensor, self.labels_tensor,
+                             self.train_proc.np_embedding_matrix)
 
             with tf.name_scope('optimizer'):
                 self.train_op = tf.train.AdamOptimizer().minimize(
@@ -238,15 +283,6 @@ class Trainer(object):
             self.val_writer = tf.summary.FileWriter(
                 str(self.hp.dir / 'tensorboard' / 'test'))
 
-    def delete(self, ask=True):
-        """Delete the trainer's directory after asking for confiirmation
-
-            ask (bool, optional): Defaults to True.
-            Whether to ask for confirmation
-        """
-        if not ask or 'y' in input('Are you sure? (y/n)'):
-            shutil.rmtree(self.hp.dir)
-
     def initialize_iterators(self, is_val=False):
         """Initializes the train and validation iterators from
         the Processers' data
@@ -265,7 +301,8 @@ class Trainer(object):
                         self.val_ph: True,
                         self.features_data_ph: feats,
                         self.labels_data_ph: labs,
-                        self.batch_size_ph: bs
+                        self.batch_size_ph: bs,
+                        self.keep_prob_dropout_ph: 1.0
                     }
                 )
             else:
@@ -278,7 +315,8 @@ class Trainer(object):
                         self.val_ph: False,
                         self.features_data_ph: feats,
                         self.labels_data_ph: labs,
-                        self.batch_size_ph: bs
+                        self.batch_size_ph: bs,
+                        self.keep_prob_dropout_ph: self.hp.dropout
                     }
                 )
 
@@ -289,36 +327,33 @@ class Trainer(object):
             * Datasets are initialized
             * Trainer is built
         """
+        if self.prepared:
+            print('Already prepared, skipping.')
+            return
+
         print('Setting Processers...')
         if self.new_procs:
-            self.train_proc.process(
-                data_path=self.hp.train_data_path
-            )
-            self.test_proc.process(
-                data_path=self.hp.test_data_path,
-                vocabulary=self.train_proc.vocab,
-                max_sent_len=self.train_proc.max_sent_len,
-                max_doc_len=self.train_proc.max_doc_len
-            )
+            self.set_procs()
 
         self.hp.set_data_values(
             self.train_proc.max_doc_len,
             self.train_proc.max_sent_len,
             self.train_proc.vocab_size,
-            100
+            300
         )
         self.model.hp.set_data_values(
             self.train_proc.max_doc_len,
             self.train_proc.max_sent_len,
             self.train_proc.vocab_size,
-            100
+            300
         )
 
         print('Ok. Setting Datasets...')
         self.make_datasets()
         print('Ok. Building graph...')
         self.build()
-        print('Ok. Training.\n')
+        print('Ok.')
+        self.prepared = True
 
     def validate(self, force=False):
         """Runs a validation step according to the current
@@ -343,7 +378,10 @@ class Trainer(object):
                 self.summary_op,
                 self.model.prediction
             ],
-            feed_dict={self.val_ph: True}
+            feed_dict={
+                self.val_ph: True,
+                self.keep_prob_dropout_ph: 1.0
+            }
         )
         self.val_writer.add_summary(summary, self.global_step)
         self.val_writer.flush()
@@ -380,7 +418,10 @@ class Trainer(object):
                                 self.model.loss,
                                 self.global_step_var,
                             ],
-                            feed_dict={self.val_ph: False}
+                            feed_dict={
+                                self.val_ph: False,
+                                self.keep_prob_dropout_ph: self.hp.dropout
+                            }
                         )
                         self.global_step = gs
                         self.train_writer.add_summary(
@@ -417,6 +458,7 @@ if __name__ == '__main__':
     import Hyperparameter as hyp
     import Model as mod
     import LogReg as lr
+    import HAN as han
 
     from importlib import reload
 
@@ -424,18 +466,32 @@ if __name__ == '__main__':
     reload(hyp)
     reload(mod)
     reload(lr)
+    reload(han)
 
-    tf.reset_default_graph()
+    f = '/Users/victor/Documents/Tracfin/dev/han/data/embeddings/'
+    f += 'glove.840B.300d.txt'
+
     hp = hyp.HP(
-        batch_size=10,
-        epochs=40,
-        val_every=100
-    )
+        batch_size=8,
+        epochs=50,
+        val_every=100,
+        embedding_file=f,
+        max_words=1e5)
+    print('Resetting default graph...')
+    tf.reset_default_graph()
+    print('Ok.')
+    procs = [
+        proc.Processer.load('../checkpoints/v1/2018-04-15/train_proc.pkl'),
+        proc.Processer.load('../checkpoints/v1/2018-04-15/test_proc.pkl')
+    ]
 
-    trainer = Trainer(
-        hp, 'LogReg'
-    )
+    # trainer = Trainer(
+    #     hp, 'LogReg'
+    # )
+
+    trainer = Trainer(hp, 'HAN', processers=procs)
     try:
+        # trainer.prepare()
         trainer.train()
     except KeyboardInterrupt:
         pass

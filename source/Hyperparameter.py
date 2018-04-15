@@ -66,7 +66,11 @@ class HP(object):
             self,
             base_dir_name=None,
             batch_size=128,
+            cell_size=10,
+            dropout=0.8,
+            embedding_file="",
             epochs=3,
+            max_words=2.5e6,
             num_classes=69,
             save_steps=1000,
             summary_secs=1000,
@@ -92,6 +96,10 @@ class HP(object):
         self.train_data_path = train_data_path
         self.val_every = val_every
         self.trainable_embedding_matrix = trainable_embedding_matrix
+        self.cell_size = cell_size
+        self.embedding_file = embedding_file
+        self.max_words = max_words
+        self.dropout = dropout
 
         self._max_sent_len = None
         self._max_doc_len = None

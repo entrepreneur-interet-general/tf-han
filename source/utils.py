@@ -1,5 +1,4 @@
 import tensorflow as tf
-import tensorflow.contrib.layers as layers
 
 try:
     from tensorflow.contrib.rnn import LSTMStateTuple
@@ -55,7 +54,7 @@ def bidirectional_rnn(cell_fw, cell_bw, inputs_embedded, input_lengths,
 
 
 def task_specific_attention(inputs, output_size,
-                            initializer=layers.xavier_initializer(),
+                            initializer=tf.contrib.layers.xavier_initializer(),
                             activation_fn=tf.tanh, scope=None):
     # github.com/ematvey/hierarchical-attention-networks/blob/
     #   master/model_components.py
@@ -81,7 +80,7 @@ def task_specific_attention(inputs, output_size,
             initializer=initializer,
             dtype=tf.float32
         )
-        input_projection = layers.fully_connected(
+        input_projection = tf.contrib.layers.fully_connected(
             inputs, output_size,
             activation_fn=activation_fn,
             scope=scope

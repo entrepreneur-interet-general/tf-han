@@ -8,58 +8,158 @@ class HAN(Model):
 
     def __init__(self, hp, graph=None):
         super().__init__(hp, graph)
+        self.np_embedding_matrix = None
         self.embedding_matrix = None
         self.batch = None
         self.docs = None
         self.sents = None
-        self.cell = tf.nn.rnn_cell.GRUCell(self.hp.cell_size)
+        self.sent_cell = tf.nn.rnn_cell.GRUCell(self.hp.cell_size)
+        self.doc_cell = tf.nn.rnn_cell.GRUCell(self.hp.cell_size)
         self.val_ph = None
+        self.embedded_inputs = None
+        self.embedded_sentences = None
+        self.sentence_lengths = None
+        self.encoded_sentences = None
+        self.attended_sentences = None
+        self.sentence_output = None
+        self.doc_inputs = None
+        self.encoded_docs = None
+        self.attended_docs = None
+        self.doc_output = None
+        self.logits = None
+        self.prediction = None
+        self.embedding_words = None
+        self.doc_lengths = None
 
     def set_logits(self):
-        (self.batch,
-         self.docs,
-         self.sents) = tf.unstack(tf.shape(self.input_tensor))
+        with tf.variable_scope('unstack-lengths'):
+            (self.batch,
+             self.docs,
+             self.sents) = tf.unstack(tf.shape(self.input_tensor))
 
-        self.embedded_inputs = tf.nn.embedding_lookup(
-            self.embedding_matrix,
-            self.input_tensor
-        )
+        with tf.variable_scope('set-lengths'):
+            self.doc_lengths = tf.count_nonzero(
+                tf.reduce_sum(
+                    self.input_tensor,
+                    axis=-1
+                ),
+                axis=-1
+            )
+            self.sentence_lengths = tf.count_nonzero(
+                self.input_tensor,
+                axis=-1
+            )
 
-        self.embedded_sentences = tf.reshape(
-            self.embedded_inputs,
-            [self.batch * self.docs, self.sents, self.hp.embedding_dim]
-        )
+        with tf.variable_scope('sentence-level'):
+            with tf.variable_scope('embedding-lookup'):
+                self.embedded_inputs = tf.nn.embedding_lookup(
+                    self.embedding_matrix,
+                    self.input_tensor
+                )
 
-        self.sentence_lengths = tf.reshape(
-            self.sentence_lengths,
-            [self.batch * self.docs]
-        )
+            with tf.variable_scope('reshape'):
+                self.embedded_sentences = tf.reshape(
+                    self.embedded_inputs,
+                    [
+                        self.batch * self.docs,
+                        self.sents,
+                        self.hp.embedding_dim
+                    ]
+                )
 
-        self.encoded_sentences, _ = bidirectional_rnn(
-            self.cell, self.cell, self.embedded_sentences,
-            self.sentence_lengths
-        )
+                self.sentence_lengths = tf.reshape(
+                    self.sentence_lengths,
+                    [self.batch * self.docs]
+                )
 
-        self.attended_sentences = task_specific_attention(
-            self.encoded_sentences,
-            self.hp.cell_size)
+            with tf.variable_scope('bidir-rnn') as scope:
+                self.encoded_sentences, _ = bidirectional_rnn(
+                    self.sent_cell, self.sent_cell, self.embedded_sentences,
+                    self.sentence_lengths, scope=scope
+                )
 
-        self.sentence_output = tf.contrib.layers.dropout(
-            self.attended_sentences, keep_prob=self.keep_prob_dropout_ph,
-            is_training=not self.val_ph,
-        )
+            with tf.variable_scope('attention') as scope:
+                self.attended_sentences = task_specific_attention(
+                    self.encoded_sentences,
+                    self.hp.cell_size, scope=scope)
 
-    def get_embedding_matrix(self):
-        return np.random.randn(10000, 300)
+            with tf.variable_scope('dropout'):
+                self.sentence_output = tf.contrib.layers.dropout(
+                    self.attended_sentences,
+                    keep_prob=self.keep_prob_dropout_ph,
+                    is_training=tf.logical_not(self.val_ph),
+                )
 
-    def set_embedding_matrix(self):
-        """Creates a random trainable embedding matrix
-        """
+        with tf.variable_scope('doc-level'):
+            with tf.variable_scope('reshape'):
+                self.doc_inputs = tf.reshape(
+                    self.sentence_output,
+                    [
+                        self.batch,
+                        self.docs,
+                        self.hp.cell_size
+                    ]
+                )
+
+            with tf.variable_scope('bidir-rnn') as scope:
+                self.encoded_docs, _ = bidirectional_rnn(
+                    self.doc_cell, self.doc_cell, self.doc_inputs,
+                    self.doc_lengths, scope=scope
+                )
+
+            with tf.variable_scope('attention') as scope:
+                self.attended_docs = task_specific_attention(
+                    self.encoded_docs, self.hp.cell_size,
+                    scope=scope)
+
+            with tf.variable_scope('dropout'):
+                self.doc_output = tf.contrib.layers.dropout(
+                    self.attended_docs, keep_prob=self.keep_prob_dropout_ph,
+                    is_training=tf.logical_not(self.val_ph),
+                )
+
+        with tf.variable_scope('classifier'):
+            self.logits = tf.layers.dense(
+                self.doc_output, self.hp.num_classes, activation=None)
+
+            self.prediction = tf.sigmoid(self.logits)
+
+    def set_embedding_matrix(self, emb_matrix):
+        self.np_embedding_matrix = emb_matrix
+
+        assert self.np_embedding_matrix is not None
+
         self.embedding_matrix = tf.get_variable(
             'embedding_matrix',
-            shape=(self.hp.vocab_size, self.hp.embedding_dim),
+            shape=self.np_embedding_matrix.shape,
             initializer=tf.constant_initializer(
-                self.get_embedding_matrix()
+                self.np_embedding_matrix
             ),
             trainable=self.hp.trainable_embedding_matrix
         )
+    # def set_embedding_matrix(self, emb_matrix):
+    #     self.np_embedding_matrix = emb_matrix
+
+    #     assert self.np_embedding_matrix is not None
+
+    #     self.embedding_matrix = tf.Variable(
+    #         tf.constant(
+    #             0.0,
+    #             shape=(self.hp.vocab_size, self.hp.embedding_dim)
+    #         ),
+    #         trainable=self.hp.trainable_embedding_matrix,
+    #         name="embedding_matrix"
+    #     )
+    #     self.embedding_placeholder = tf.placeholder(
+    #         tf.float32, (self.hp.vocab_size, self.hp.embedding_dim)
+    #     )
+    #     embedding_init = self.embedding_matrix.assign(
+    #         self.embedding_placeholder
+    #     )
+    #     print('Assigning Embedding matrix')
+    #     self.sess.run(
+    #         embedding_init,
+    #         feed_dict={
+    #             self.embedding_placeholder: self.np_embedding_matrix
+    #         }
+    #     )

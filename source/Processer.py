@@ -1,9 +1,37 @@
 from pathlib import Path
 import pickle
 import numpy as np
+import copy
 
 
 class Processer(object):
+
+    @staticmethod
+    def build_word_vector_matrix(vector_file, n_words):
+        n_words = int(n_words)
+        with open(vector_file, 'r') as f:
+            print('Loading file...', end='\r')
+            lines = f.readlines()
+            print('{:20}'.format(' '))
+        vectors = np.zeros((
+            min([len(lines), n_words]) if n_words else len(lines),
+            len(lines[0].split()[1:])
+        ))
+        words = {}
+        for i, l in enumerate(lines):
+            if i == n_words:
+                print('Reached max_words: stopping here (%d).' % i)
+                break
+            print('Embedding %d' % i, end='\r')
+            values = l.split()
+            try:
+                vectors[i, :] = np.array(values[1:]).astype(np.float32)
+                words[values[0]] = i
+            except ValueError:
+                print('Ignored vector: ', values[:10], '...')
+
+        return words, vectors
+
     @staticmethod
     def get_maxs(data):
         """Computes the longest sentence and the longest doc
@@ -36,7 +64,7 @@ class Processer(object):
             as lists of sentences as lists of words
 
         Returns:
-            tuple(list): list of document lengths, list of sentence 
+            tuple(list): list of document lengths, list of sentence
             lengths per document
         """
         doc_lengths = [len(d) for d in data]
@@ -59,7 +87,11 @@ class Processer(object):
             print(
                 'Remember, a loaded Processer does not have a data attribute'
             )
-            return pickle.load(f)
+            dic = pickle.load(f)
+        proc = Processer()
+        for k, v in dic.items():
+            proc.__setattr__(k, v)
+        return proc
 
     def __init__(self):
         """Processer constructor
@@ -68,6 +100,8 @@ class Processer(object):
         self.max_sent_len = None
         self.max_doc_len = None
         self.embedding_dim = None
+        self.embedding_file = None
+        self.max_words = None
         self.data = None
         self.stop_words = [',', '"', "'"]
         self.end_of_sentences = ['.', '!', '?']
@@ -77,6 +111,8 @@ class Processer(object):
         self.features = None
         self.doc_lengths = None
         self.sent_lengths = None
+        self.np_embedding_matrix = None
+        self.emb_vocab = None
 
     def assert_data(self):
         """Checks that the Processer has a data attribute
@@ -162,8 +198,6 @@ class Processer(object):
 
         if not max_sent_len and not max_doc_len:
             max_doc_len, max_sent_len = self.get_maxs(data)
-
-        if not vocabulary:
             self.max_doc_len = max_doc_len
             self.max_sent_len = max_sent_len
 
@@ -212,11 +246,15 @@ class Processer(object):
         path = Path(save_path).resolve()
         if path.is_dir():
             path /= 'processer.pkl'
-        temp = self.data
-        del self.data
+        dic = {
+            k: self.__getattribute__(k)
+            for k in dir(self)
+            if '__' not in k and
+            'data' not in k and
+            not callable(self.__getattribute__(k))
+        }
         with path.open('wb') as f:
-            pickle.dump(self, f)
-        self.data = temp
+            pickle.dump(dic, f)
 
     def process(self,
                 data_path='../data/toy',
@@ -247,6 +285,7 @@ class Processer(object):
         self.load_data(data_path)
         self.delete_stop_words()
         self.split_sentences()
+
         self.embedded_data = self.embed(
             self.data,
             vocabulary=vocabulary,
@@ -254,6 +293,7 @@ class Processer(object):
             max_sent_len=max_sent_len,
             max_doc_len=max_doc_len
         )
+
         self.doc_lengths, self.sent_lengths = self.get_lengths(self.data)
         self.features = np.array(self.embedded_data)
         if save_path:
