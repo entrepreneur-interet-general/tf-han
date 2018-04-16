@@ -1,7 +1,7 @@
 from pathlib import Path
 import pickle
 import numpy as np
-import copy
+from collections import defaultdict
 
 
 class Processer(object):
@@ -128,7 +128,7 @@ class Processer(object):
         * toy: to experiment
 
         Others could be implemented.
-        Sets the Processer's data attribute.
+        Sets the Processer's data attribute as a list of documents
 
         Args:
             data_path (str or pathlib.Path): where to find the data
@@ -167,7 +167,7 @@ class Processer(object):
         self.data = [[' '.join(w.split())
                       for w in s.split('@@@') if w] for s in self.data]
 
-    def embed(self, data, vocabulary=None, max_size=1e6,
+    def embed(self, data, vocabulary=None, max_vocab_size=1e6,
               max_sent_len=None,
               max_doc_len=None):
         """Embeds self.data according to vocabulary. If none is provided,
@@ -185,8 +185,8 @@ class Processer(object):
             vocabulary (dict, optional): Defaults to None. The vocabulary to
             embed the sentences from as {word: index}.
             If None, a new one is created.
-            max_size (number, optional): Defaults to 1e6. max length of the
-            vocabulary
+            max_vocab_size (number, optional): Defaults to 1e6.
+            max length of the vocabulary
             max_sent_len (int, optional): Defaults to None. Max allowed
             length of sentences. If None, it's computed from data
             max_doc_len (int, optional): Defaults to None. idem for documents
@@ -201,11 +201,11 @@ class Processer(object):
             self.max_doc_len = max_doc_len
             self.max_sent_len = max_sent_len
 
-        vocab = vocabulary or {
+        vocab = vocabulary or defaultdict(int, {
             '<PAD>': 0,
             '<OOV>': 1
-        }
-        set_vocab = set(vocab.keys())
+        })
+
         embedded_data = [
             [
                 [0 for w in range(max_sent_len)]
@@ -214,6 +214,7 @@ class Processer(object):
             for d in self.data
         ]
         if vocabulary:
+            set_vocab = set(vocab.keys())
             for d, doc in enumerate(data):
                 for s, sentence in enumerate(doc):
                     for w, word in enumerate(sentence.split()):
@@ -223,15 +224,22 @@ class Processer(object):
             for d, doc in enumerate(data):
                 for s, sentence in enumerate(doc):
                     for w, word in enumerate(sentence.split()):
+                        vocab[w] += 1
+            frequent_words = sorted(
+                vocab, key=vocab.get, reverse=True
+            )[:max_vocab_size]
+            vocab = {
+                k: vocab[k] for k in frequent_words
+            }
+            set_vocab = set(vocab.keys())
+
+            for d, doc in enumerate(data):
+                for s, sentence in enumerate(doc):
+                    for w, word in enumerate(sentence.split()):
                         if word in set_vocab:
                             embedded_data[d][s][w] = vocab[word]
                         else:
-                            if len(set_vocab) < max_size:
-                                set_vocab.add(word)
-                                vocab[word] = len(vocab)
-                                embedded_data[d][s][w] = vocab[word]
-                            else:
-                                embedded_data[d][s][w] = vocab['<OOV>']
+                            embedded_data[d][s][w] = vocab['<OOV>']
         self.vocab = vocab
         self.vocab_size = len(vocab)
         return embedded_data
@@ -262,7 +270,7 @@ class Processer(object):
                 vocabulary=None,
                 max_sent_len=None,
                 max_doc_len=None,
-                max_size=1e6):
+                max_vocab_size=1e6):
         """Main funciton executing the major processing
         steps for the data:
         * load the data
@@ -271,7 +279,7 @@ class Processer(object):
         * embed resulting data
         * creates a features attribute from it
 
-            data_path (str, optional): Defaults to '../data/toy'. 
+            data_path (str, optional): Defaults to '../data/toy'.
                 path where to find the data
             save_path (str, optional): Defaults to ''.
                 path where to save the processer
@@ -279,7 +287,7 @@ class Processer(object):
                 vocabulary to embed the data
             max_sent_len (int, optional): Defaults to None. see embed
             max_doc_len (int, optional): Defaults to None. see embed
-            max_size (number, optional): Defaults to 1e6. see embed
+            max_vocab_size (number, optional): Defaults to 1e6. see embed
         """
 
         self.load_data(data_path)
@@ -289,7 +297,7 @@ class Processer(object):
         self.embedded_data = self.embed(
             self.data,
             vocabulary=vocabulary,
-            max_size=max_size,
+            max_vocab_size=max_vocab_size,
             max_sent_len=max_sent_len,
             max_doc_len=max_doc_len
         )
