@@ -70,12 +70,14 @@ class HP(object):
             dropout=0.8,
             embedding_file="",
             epochs=3,
+            learning_rate=1e-3,
             max_words=2.5e6,
+            multilabel=True,
             num_classes=69,
             save_steps=1000,
             summary_secs=1000,
             trainable_embedding_matrix=False,
-            test_data_path='../data/toy/test',
+            val_data_path='../data/toy/test',
             train_data_path='../data/toy',
             val_every=100,
             version='v1',
@@ -92,7 +94,7 @@ class HP(object):
         self.batch_size = batch_size
         self.num_classes = num_classes
         self.epochs = epochs
-        self.test_data_path = test_data_path
+        self.val_data_path = val_data_path
         self.train_data_path = train_data_path
         self.val_every = val_every
         self.trainable_embedding_matrix = trainable_embedding_matrix
@@ -100,6 +102,8 @@ class HP(object):
         self.embedding_file = embedding_file
         self.max_words = max_words
         self.dropout = dropout
+        self.learning_rate = learning_rate
+        self.multilabel = multilabel
 
         self._max_sent_len = None
         self._max_doc_len = None
