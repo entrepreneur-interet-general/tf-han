@@ -63,12 +63,20 @@ class Model(object):
         """
         with self.graph.as_default():
             with tf.name_scope('loss'):
-                self.loss = tf.reduce_mean(
-                    tf.nn.sigmoid_cross_entropy_with_logits(
-                        logits=self.logits,
-                        labels=self.labels_tensor,
-                        name='sig-xent'),
-                    name="mean-sig-xent")
+                if self.hp.multilabel:
+                    self.loss = tf.reduce_mean(
+                        tf.nn.sigmoid_cross_entropy_with_logits(
+                            logits=self.logits,
+                            labels=self.labels_tensor,
+                            name='sig-xent'),
+                        name="mean-sig-xent")
+                else:
+                    self.loss = tf.reduce_mean(
+                        tf.nn.softmax_cross_entropy_with_logits(
+                            logits=self.logits,
+                            labels=self.labels_tensor,
+                            name='xent'),
+                        name="mean-xent")
 
     def build(self, input_tensor, labels_tensor, emb_matrix=None):
         """Computes the major operations to create a model:
