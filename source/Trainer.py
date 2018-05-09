@@ -114,16 +114,16 @@ class Trainer(object):
             assert len(processers) == 2
 
             if isinstance(processers[0], proc.Processer):
-                self.train_proc, self.test_proc = processers
+                self.train_proc, self.val_proc = processers
             else:
                 processers = [Path(p) for p in processers]
                 self.train_proc = Processer.load(processers[0])
-                self.test_proc = Processer.load(processers[1])
+                self.val_proc = Processer.load(processers[1])
             self.new_procs = False
 
         else:
             self.train_proc = Processer()
-            self.test_proc = Processer()
+            self.val_proc = Processer()
 
         self.server = None
         self.summary_op = None
@@ -186,8 +186,8 @@ class Trainer(object):
             data_path=self.hp.train_data_path,
             vocabulary=voc
         )
-        self.test_proc.process(
-            data_path=self.hp.test_data_path,
+        self.val_proc.process(
+            data_path=self.hp.val_data_path,
             vocabulary=self.train_proc.vocab,
             max_sent_len=self.train_proc.max_sent_len,
             max_doc_len=self.train_proc.max_doc_len
@@ -197,7 +197,7 @@ class Trainer(object):
         path = path or self.hp.dir
         path = Path(path)
         self.train_proc.save(path / 'train_proc.pkl')
-        self.test_proc.save(path / 'test_proc.pkl')
+        self.val_proc.save(path / 'val_proc.pkl')
 
     def make_datasets(self):
         """Creates 2 datasets, one to train the other to validate the model.
@@ -261,7 +261,8 @@ class Trainer(object):
                              self.train_proc.np_embedding_matrix)
 
             with tf.name_scope('optimizer'):
-                self.train_op = tf.train.AdamOptimizer().minimize(
+                self.train_op = tf.train.AdamOptimizer(
+                    learning_rate=self.hp.learning_rate).minimize(
                     self.model.loss,
                     global_step=self.global_step_var
                 )
@@ -281,7 +282,7 @@ class Trainer(object):
             self.train_writer = tf.summary.FileWriter(
                 str(self.hp.dir / 'tensorboard' / 'train'), self.graph)
             self.val_writer = tf.summary.FileWriter(
-                str(self.hp.dir / 'tensorboard' / 'test'))
+                str(self.hp.dir / 'tensorboard' / 'val'))
 
     def initialize_iterators(self, is_val=False):
         """Initializes the train and validation iterators from
@@ -292,8 +293,8 @@ class Trainer(object):
         """
         with self.graph.as_default():
             if is_val:
-                feats = self.test_proc.features
-                labs = self.test_proc.labels
+                feats = self.val_proc.features
+                labs = self.val_proc.labels
                 bs = len(feats)
                 self.sess.run(
                     self.val_iterator.initializer,
@@ -472,24 +473,30 @@ if __name__ == '__main__':
     f += 'glove.840B.300d.txt'
 
     hp = hyp.HP(
-        batch_size=8,
-        epochs=50,
-        val_every=100,
+        multilabel=False,
+        batch_size=64,
+        learning_rate=5e-4,
+        cell_size=100,
+        epochs=5,
+        val_every=1000,
         embedding_file=f,
-        max_words=1e5)
+        max_words=1e5,
+        num_classes=5,
+        train_data_path='/Users/victor/Documents/Tracfin/dev/han/data/yelp/sample_001_train_07.json',
+        val_data_path='/Users/victor/Documents/Tracfin/dev/han/data/yelp/sample_001_val_01.json')
     print('Resetting default graph...')
     tf.reset_default_graph()
     print('Ok.')
-    procs = [
-        proc.Processer.load('../checkpoints/v1/2018-04-15/train_proc.pkl'),
-        proc.Processer.load('../checkpoints/v1/2018-04-15/test_proc.pkl')
-    ]
+    # procs = [
+    #     proc.Processer.load('../checkpoints/v1/2018-04-15/train_proc.pkl'),
+    #     proc.Processer.load('../checkpoints/v1/2018-04-15/val_proc.pkl')
+    # ]
 
     # trainer = Trainer(
     #     hp, 'LogReg'
     # )
 
-    trainer = Trainer(hp, 'HAN', processers=procs)
+    trainer = Trainer(hp, 'HAN')
     try:
         # trainer.prepare()
         trainer.train()
