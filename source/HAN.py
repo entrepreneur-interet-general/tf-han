@@ -122,7 +122,8 @@ class HAN(Model):
             self.logits = tf.layers.dense(
                 self.doc_output, self.hp.num_classes, activation=None)
 
-            self.prediction = tf.sigmoid(self.logits)
+            self.prediction = tf.sigmoid(self.logits) \
+                if self.hp.multilabel else tf.argmax(self.logits)
 
     def set_embedding_matrix(self, emb_matrix):
         self.np_embedding_matrix = emb_matrix
