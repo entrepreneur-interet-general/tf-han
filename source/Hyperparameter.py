@@ -85,8 +85,8 @@ class HP(object):
         self.__str_no_k = set(['dir'])
         self.__str_no_v = set(['method', 'function'])
         self._path = ''
-        self.now = datetime.datetime.now()
-        self.base_dir_name = base_dir_name or str(self.now)[:10]
+        self.created_at = datetime.datetime.now()
+        self.base_dir_name = base_dir_name or str(self.created_at)[:10]
 
         self.version = version
         self.save_steps = save_steps
@@ -135,9 +135,9 @@ class HP(object):
         """Class name and id are enough to represent a hyper parameter
 
         Returns:
-            str: <<classname> self.id self.now>
+            str: <<classname> self.id self.created_at>
         """
-        return '<%s %s %s>' % (self.__class__, self.id, self.now)
+        return '<%s %s %s>' % (self.__class__, self.id, self.created_at)
 
     def safe_dict(self):
         d = {
@@ -194,7 +194,7 @@ class HP(object):
         """Returns a pathlib object whith the parameter's directory.
         If it's the first time the dir is accessed, it is created.
         Cannonical path is:
-        current/working/directory/checkpoints/
+        currentworkingdirectory/checkpoints/
             <self.version>/<self.base_dir_name>_<new_index>
 
         Returns:
@@ -219,11 +219,11 @@ class HP(object):
                         int(str(p).split("_")[-1] if '_' in str(p) else "0")
                         for p in paths]
                 ) + 1
-                new_name = self.base_dir_name + '_%d' % _id
-                self.id = self.version + ' | ' + new_name
+                new_name = "{}_{}".format(self.base_dir_name, _id)
             else:
                 new_name = self.base_dir_name
-                self.id = self.version + ' | ' + new_name
+
+            self.id = "{} | {}".format(self.version, new_name)
 
             path /= new_name
             path.mkdir()
