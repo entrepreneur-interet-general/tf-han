@@ -66,7 +66,7 @@ def task_specific_attention(inputs, output_size,
             `input_size` must be static (known)
             `units` axis will be attended over (reduced from output)
             `batch_size` will be preserved
-        output_size: Size of output's inner (feature) dimension
+        output_size: Size of output's inner (feature) axisension
     Returns:
         outputs: Tensor of shape [batch_size, output_dim].
     """
@@ -88,9 +88,9 @@ def task_specific_attention(inputs, output_size,
 
         vector_attn = tf.reduce_sum(
             tf.multiply(input_projection, attention_context_vector),
-            axis=2, keep_dims=True
+            axis=2, keepdims=True
         )
-        attention_weights = tf.nn.softmax(vector_attn, dim=1)
+        attention_weights = tf.nn.softmax(vector_attn, axis=1)
         weighted_projection = tf.multiply(input_projection, attention_weights)
 
         outputs = tf.reduce_sum(weighted_projection, axis=1)
