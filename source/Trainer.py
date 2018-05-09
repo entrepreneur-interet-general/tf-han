@@ -272,11 +272,16 @@ class Trainer(object):
                     self.labels_tensor,
                     self.model.prediction,
                 )
+                accuracy = tf.contrib.metrics.accuracy(
+                    self.model.prediction,
+                    self.labels_tensor
+                )
             with tf.name_scope('summaries'):
                 tf.summary.scalar("LLoss", self.model.loss)
                 tf.summary.scalar("macro_f1", macro_f1)
                 tf.summary.scalar("micro_f1", micro_f1)
                 tf.summary.scalar("weighted_f1", weighted_f1)
+                tf.summary.scalar("accuracy", accuracy)
                 self.summary_op = tf.summary.merge_all()
 
             self.train_writer = tf.summary.FileWriter(
@@ -309,7 +314,7 @@ class Trainer(object):
             else:
                 feats = self.train_proc.features
                 labs = self.train_proc.labels
-                bs = self.hp.batch_size
+                bs = self.hp.val_batch_size
                 self.sess.run(
                     self.train_iterator.initializer,
                     feed_dict={
@@ -367,9 +372,13 @@ class Trainer(object):
             str: Information to print
         """
         if self.global_step == 0:
+            # don't validate on first step eventhough
+            # self.global_step % self.hp.val_every == 0
             return ''
 
-        if not force and self.global_step % self.hp.val_every != 0:
+        if (not force) and self.global_step % self.hp.val_every != 0:
+            # validate if force eventhough
+            # self.global_step % self.hp.val_every != 0
             return ''
 
         self.initialize_iterators(is_val=True)
@@ -448,6 +457,8 @@ class Trainer(object):
                             break
             # End of epochs
             if self.global_step % self.hp.val_every != 0:
+                # print final validation if not done at the end
+                # of last epoch
                 print('\n[{}] Finally {}'.format(
                     strtime(self.train_start_time),
                     self.validate(True)
@@ -474,13 +485,14 @@ if __name__ == '__main__':
 
     hp = hyp.HP(
         multilabel=False,
-        batch_size=64,
+        batch_size=32,
         learning_rate=5e-4,
         cell_size=100,
         epochs=5,
         val_every=1000,
+        val_batch_size=1000,
         embedding_file=f,
-        max_words=1e5,
+        max_words=1e6,
         num_classes=5,
         train_data_path='/Users/victor/Documents/Tracfin/dev/han/data/yelp/sample_001_train_07.json',
         val_data_path='/Users/victor/Documents/Tracfin/dev/han/data/yelp/sample_001_val_01.json')
@@ -498,7 +510,6 @@ if __name__ == '__main__':
 
     trainer = Trainer(hp, 'HAN')
     try:
-        # trainer.prepare()
         trainer.train()
     except KeyboardInterrupt:
         pass

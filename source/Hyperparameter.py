@@ -78,6 +78,7 @@ class HP(object):
             summary_secs=1000,
             trainable_embedding_matrix=False,
             val_data_path='../data/toy/test',
+            val_batch_size=1000,
             train_data_path='../data/toy',
             val_every=100,
             version='v1',
@@ -104,6 +105,7 @@ class HP(object):
         self.dropout = dropout
         self.learning_rate = learning_rate
         self.multilabel = multilabel
+        self.val_batch_size = val_batch_size
 
         self._max_sent_len = None
         self._max_doc_len = None
