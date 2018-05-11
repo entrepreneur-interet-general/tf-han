@@ -39,7 +39,7 @@ class HP(object):
             [type]: [description]
         """
         path = pathlib.Path(path_to_HP)
-        to = file_type if file_type in["pickle", "json"] else "pickle"
+        to = file_type if file_type in ["pickle", "json"] else "pickle"
         if to == "pickle":
             ext = '.pkl'
         else:
@@ -65,12 +65,15 @@ class HP(object):
     def __init__(
             self,
             base_dir_name=None,
-            batch_size=128,
-            cell_size=10,
-            dropout=0.8,
+            batch_size=32,
+            cell_size=50,
+            decay_steps=10,
+            decay_rate=0.99,
+            dropout=0.5,
             embedding_file="",
             epochs=3,
-            learning_rate=1e-3,
+            learning_rate=1e-2,
+            max_grad_norm=5.0,
             max_words=2.5e6,
             multilabel=True,
             num_classes=69,
@@ -83,11 +86,12 @@ class HP(object):
             val_every=100,
             version='v1',
     ):
-        self.__str_no_k = set(['dir'])
-        self.__str_no_v = set(['method', 'function'])
+
+        now = datetime.datetime.now()
+        self._str_no_k = ['dir']
         self._path = ''
-        self.created_at = datetime.datetime.now()
-        self.base_dir_name = base_dir_name or str(self.created_at)[:10]
+        self.created_at = int(now.timestamp())
+        self.base_dir_name = base_dir_name or str(now)[:10]
 
         self.version = version
         self.save_steps = save_steps
@@ -106,6 +110,9 @@ class HP(object):
         self.learning_rate = learning_rate
         self.multilabel = multilabel
         self.val_batch_size = val_batch_size
+        self.max_grad_norm = max_grad_norm
+        self.decay_steps = decay_steps
+        self.decay_rate = decay_rate
 
         self._max_sent_len = None
         self._max_doc_len = None
@@ -128,27 +135,25 @@ class HP(object):
             '{:25s} : {:10s}'.format(k, str(self.__getattribute__(k)))
             for k in sorted(dir(self))
             if '__' not in k and
-            k not in self.__str_no_k and
-            not any(v in str(self.__getattribute__(k))
-                    for v in self.__str_no_v)
+            k not in self._str_no_k and
+            not callable(self.__getattribute__(k))
         )
 
     def __repr__(self):
         """Class name and id are enough to represent a hyper parameter
 
         Returns:
-            str: <<classname> self.id self.created_at>
+            str: <<classname> self.id>
         """
-        return '<%s %s %s>' % (self.__class__, self.id, self.created_at)
+        return '<%s %s>' % (self.__class__, self.id)
 
     def safe_dict(self):
         d = {
             k: self.__getattribute__(k)
-            for k in dir(self)
-            if '__' not in k and
-            k not in self.__str_no_k and
-            not any(v in str(self.__getattribute__(k))
-                    for v in self.__str_no_v)
+            for k in sorted(dir(self))
+            if k not in self._str_no_k and
+            not callable(self.__getattribute__(k)) and
+            '__' not in k
         }
         return d
 
