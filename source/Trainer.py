@@ -142,6 +142,9 @@ class Trainer(object):
         self.global_step_var = None
         self.global_step = None
         self.train_start_time = None
+        self.micro_f1 = None
+        self.macro_f1 = None
+        self.weighted_f1 = None
 
         with self.graph.as_default():
             self.global_step_var = tf.get_variable(
@@ -260,12 +263,21 @@ class Trainer(object):
             self.model.build(self.input_tensor, self.labels_tensor,
                              self.train_proc.np_embedding_matrix)
 
-            with tf.name_scope('optimizer'):
-                self.train_op = tf.train.AdamOptimizer(
-                    learning_rate=self.hp.learning_rate).minimize(
-                    self.model.loss,
-                    global_step=self.global_step_var
-                )
+            with tf.name_scope('optimization'):
+                learning_rate = tf.train.exponential_decay(
+                    self.hp.learning_rate,
+                    self.global_step_var,
+                    self.hp.decay_steps,
+                    self.hp.decay_rate)
+                optimizer = tf.train.AdamOptimizer(learning_rate)
+                gradients = tf.gradients(self.model.loss, tf.trainable_variables())
+                clipped_gradients, _ = tf.clip_by_global_norm(
+                    gradients, self.hp.max_grad_norm)
+                grads_and_vars = tuple(
+                    zip(clipped_gradients, tf.trainable_variables()))
+                self.train_op = optimizer.apply_gradients(
+                    grads_and_vars,
+                    global_step=self.global_step_var)
 
             with tf.name_scope('metrics'):
                 micro_f1, macro_f1, weighted_f1 = self.f1_score(
@@ -273,15 +285,19 @@ class Trainer(object):
                     self.model.prediction,
                 )
                 accuracy = tf.contrib.metrics.accuracy(
-                    self.model.prediction,
+                    tf.cast(self.model.prediction, tf.int32),
                     self.labels_tensor
                 )
+                self.micro_f1 = micro_f1
+                self.macro_f1 = macro_f1
+                self.weighted_f1 = weighted_f1
             with tf.name_scope('summaries'):
                 tf.summary.scalar("LLoss", self.model.loss)
                 tf.summary.scalar("macro_f1", macro_f1)
                 tf.summary.scalar("micro_f1", micro_f1)
                 tf.summary.scalar("weighted_f1", weighted_f1)
                 tf.summary.scalar("accuracy", accuracy)
+                tf.summary.scalar("learning_rate", learning_rate)
                 self.summary_op = tf.summary.merge_all()
 
             self.train_writer = tf.summary.FileWriter(
@@ -314,7 +330,7 @@ class Trainer(object):
             else:
                 feats = self.train_proc.features
                 labs = self.train_proc.labels
-                bs = self.hp.val_batch_size
+                bs = self.hp.batch_size
                 self.sess.run(
                     self.train_iterator.initializer,
                     feed_dict={
@@ -358,7 +374,9 @@ class Trainer(object):
         self.make_datasets()
         print('Ok. Building graph...')
         self.build()
-        print('Ok.')
+        print('Ok. Saving hp...')
+        self.hp.dump()
+        print('OK.')
         self.prepared = True
 
     def validate(self, force=False):
@@ -371,22 +389,28 @@ class Trainer(object):
         Returns:
             str: Information to print
         """
+        # Validate every n examples so every n/batch_size batchs
+        val_every = self.hp.val_every // self.hp.batch_size
+
         if self.global_step == 0:
             # don't validate on first step eventhough
-            # self.global_step % self.hp.val_every == 0
+            # self.global_step % val_every == 0
             return ''
 
-        if (not force) and self.global_step % self.hp.val_every != 0:
+        if (not force) and self.global_step % val_every != 0:
             # validate if force eventhough
-            # self.global_step % self.hp.val_every != 0
+            # self.global_step % val_every != 0
             return ''
 
         self.initialize_iterators(is_val=True)
 
-        summary, self.y_pred = self.sess.run(
+        summary, self.y_pred, mic, mac, wei = self.sess.run(
             [
                 self.summary_op,
-                self.model.prediction
+                self.model.prediction,
+                self.micro_f1,
+                self.macro_f1,
+                self.weighted_f1
             ],
             feed_dict={
                 self.val_ph: True,
@@ -395,8 +419,9 @@ class Trainer(object):
         )
         self.val_writer.add_summary(summary, self.global_step)
         self.val_writer.flush()
-        val_string = ' | Validation at Step {}: {}\n'.format(
-            self.global_step, str((self.y_pred > 0.5).sum(1))
+        val_string = ' | Validation at Step '
+        val_string += '{}: Mi {:.4f} Ma {:.4f} We {:.4f}\n'.format(
+            self.global_step, mic, mac, wei
         )
         return val_string
 
@@ -486,16 +511,16 @@ if __name__ == '__main__':
     hp = hyp.HP(
         multilabel=False,
         batch_size=32,
-        learning_rate=5e-4,
-        cell_size=100,
-        epochs=5,
-        val_every=1000,
+        learning_rate=1e-2,
+        cell_size=10,
+        epochs=20,
+        val_every=15000,
         val_batch_size=1000,
         embedding_file=f,
-        max_words=1e6,
+        max_words=5e5,
         num_classes=5,
-        train_data_path='/Users/victor/Documents/Tracfin/dev/han/data/yelp/sample_001_train_07.json',
-        val_data_path='/Users/victor/Documents/Tracfin/dev/han/data/yelp/sample_001_val_01.json')
+        train_data_path='/Users/victor/Documents/Tracfin/dev/han/data/yelp/sample_0001_train_07.json',
+        val_data_path='/Users/victor/Documents/Tracfin/dev/han/data/yelp/sample_0001_val_01.json')
     print('Resetting default graph...')
     tf.reset_default_graph()
     print('Ok.')
