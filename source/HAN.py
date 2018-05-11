@@ -13,8 +13,10 @@ class HAN(Model):
         self.batch = None
         self.docs = None
         self.sents = None
-        self.sent_cell = tf.nn.rnn_cell.GRUCell(self.hp.cell_size)
-        self.doc_cell = tf.nn.rnn_cell.GRUCell(self.hp.cell_size)
+        self.sent_cell_fw = tf.nn.rnn_cell.GRUCell(self.hp.cell_size)
+        self.sent_cell_bw = tf.nn.rnn_cell.GRUCell(self.hp.cell_size)
+        self.doc_cell_fw = tf.nn.rnn_cell.GRUCell(self.hp.cell_size)
+        self.doc_cell_bw = tf.nn.rnn_cell.GRUCell(self.hp.cell_size)
         self.val_ph = None
         self.embedded_inputs = None
         self.embedded_sentences = None
@@ -74,7 +76,8 @@ class HAN(Model):
 
             with tf.variable_scope('bidir-rnn') as scope:
                 self.encoded_sentences, _ = bidirectional_rnn(
-                    self.sent_cell, self.sent_cell, self.embedded_sentences,
+                    self.sent_cell_fw, self.sent_cell_bw,
+                    self.embedded_sentences,
                     self.sentence_lengths, scope=scope
                 )
 
@@ -103,7 +106,7 @@ class HAN(Model):
 
             with tf.variable_scope('bidir-rnn') as scope:
                 self.encoded_docs, _ = bidirectional_rnn(
-                    self.doc_cell, self.doc_cell, self.doc_inputs,
+                    self.doc_cell_fw, self.doc_cell_bw, self.doc_inputs,
                     self.doc_lengths, scope=scope
                 )
 
@@ -138,29 +141,3 @@ class HAN(Model):
             ),
             trainable=self.hp.trainable_embedding_matrix
         )
-    # def set_embedding_matrix(self, emb_matrix):
-    #     self.np_embedding_matrix = emb_matrix
-
-    #     assert self.np_embedding_matrix is not None
-
-    #     self.embedding_matrix = tf.Variable(
-    #         tf.constant(
-    #             0.0,
-    #             shape=(self.hp.vocab_size, self.hp.embedding_dim)
-    #         ),
-    #         trainable=self.hp.trainable_embedding_matrix,
-    #         name="embedding_matrix"
-    #     )
-    #     self.embedding_placeholder = tf.placeholder(
-    #         tf.float32, (self.hp.vocab_size, self.hp.embedding_dim)
-    #     )
-    #     embedding_init = self.embedding_matrix.assign(
-    #         self.embedding_placeholder
-    #     )
-    #     print('Assigning Embedding matrix')
-    #     self.sess.run(
-    #         embedding_init,
-    #         feed_dict={
-    #             self.embedding_placeholder: self.np_embedding_matrix
-    #         }
-    #     )
