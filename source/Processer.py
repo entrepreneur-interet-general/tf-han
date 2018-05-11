@@ -288,10 +288,14 @@ class Processer(object):
 
     def save_processed(self, save_path):
         """Dumps the Processer without its
-        data attribute to save disk
+        data attribute to save disk.
+        To same from a Trainer: trainer.train_proc.save_processed(
+            trainer.hp.dir / 'train_proc'
+        )
 
         Args:
-            save_path (str or pathlib.Path): [description]
+            save_path (str or pathlib.Path): path to the 
+            directory where to save the processer
         """
         stime = time()
         # If path is relative and contains ../ :
