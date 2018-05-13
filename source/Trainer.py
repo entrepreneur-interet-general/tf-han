@@ -5,6 +5,7 @@ import tensorflow as tf
 from pathlib import Path
 from time import time
 import shutil
+import numpy as np
 
 
 def strtime(ref):
@@ -26,6 +27,24 @@ def strtime(ref):
 
 
 class Trainer(object):
+
+    @staticmethod
+    def initialize_from_trainer(trainer):
+        """Creates a new Trainer instance from an
+        existing trainer's hp and processers
+
+        Args:
+            trainer (Trainer): trainer to initialize from
+
+        Returns:
+            Trainer: New trainer with identical parameters and
+            processers
+        """
+        hp = trainer.hp
+        hp.assign_new_dir()
+        return Trainer(
+            hp, trainer.model_type, processers=[trainer.train_proc, trainer.val_proc])
+
     @staticmethod
     def f1_score(y_true, y_pred):
         """Computes 3 different f1 scores, micro macro
@@ -98,6 +117,8 @@ class Trainer(object):
         self.sess = sess or tf.Session(graph=self.graph)
         self.prepared = False
 
+        self.model_type = model_type
+
         if model_type == 'LogReg':
             self.model = LogReg(trainer_hp, self.graph)
         elif model_type == 'HAN':
@@ -113,12 +134,14 @@ class Trainer(object):
             assert isinstance(processers, list)
             assert len(processers) == 2
 
-            if isinstance(processers[0], proc.Processer):
-                self.train_proc, self.val_proc = processers
-            else:
+            if isinstance(processers[0], (str, Path)):
                 processers = [Path(p) for p in processers]
                 self.train_proc = Processer.load(processers[0])
                 self.val_proc = Processer.load(processers[1])
+            else:
+                print('Reused procs')
+                self.train_proc, self.val_proc = processers
+
             self.new_procs = False
 
         else:
@@ -130,10 +153,12 @@ class Trainer(object):
         self.train_op = None
         self.features_data_ph = None
         self.labels_data_ph = None
-        self.val_iterator = None
+        self.val_iter = None
         self.val_dataset = None
-        self.train_iterator = None
+        self.train_iter = None
         self.train_dataset = None
+        self.infer_iter = None
+        self.infer_dataset = None
         self.input_tensor = None
         self.labels_tensor = None
         self.y_pred = None
@@ -145,6 +170,12 @@ class Trainer(object):
         self.micro_f1 = None
         self.macro_f1 = None
         self.weighted_f1 = None
+        self.val_feats = None
+        self.val_labs = None
+        self.val_bs = None
+        self.train_feats = None
+        self.train_labs = None
+        self.train_bs = None
 
         with self.graph.as_default():
             self.global_step_var = tf.get_variable(
@@ -155,12 +186,9 @@ class Trainer(object):
                 trainable=False
             )
             self.batch_size_ph = tf.placeholder(tf.int64)
-            self.val_ph = tf.placeholder(tf.bool, name='val_ph')
-            self.keep_prob_dropout_ph = tf.placeholder(
-                tf.float32, name='keep_prob_dropout_ph'
-            )
-            self.model.val_ph = self.val_ph
-            self.model.keep_prob_dropout_ph = self.keep_prob_dropout_ph
+            self.mode_ph = tf.placeholder(tf.int32, name='mode_ph')
+            self.model.mode_ph = self.mode_ph
+            self.model.is_training = tf.equal(self.mode_ph, 0)
 
     def delete(self, ask=True):
         """Delete the trainer's directory after asking for confiirmation
@@ -204,8 +232,9 @@ class Trainer(object):
 
     def make_datasets(self):
         """Creates 2 datasets, one to train the other to validate the model.
-        Conditioned on the value of val_ph, the input and label tensors come
-        from either the validation (True) or training (False) set.
+        Conditioned on the value of mode_ph, the input and label tensors come
+        from either the training set (0), validation set (1) or custom
+        inference values (2).
         """
 
         with self.graph.as_default():
@@ -228,7 +257,7 @@ class Trainer(object):
                     buffer_size=100000)
                 self.train_dataset = self.train_dataset.batch(
                     self.batch_size_ph)
-                self.train_iterator = \
+                self.train_iter = \
                     self.train_dataset.make_initializable_iterator()
 
                 self.val_dataset = tf.data.Dataset.from_tensor_slices(
@@ -236,13 +265,21 @@ class Trainer(object):
                 )
                 self.val_dataset = self.val_dataset.shuffle(buffer_size=100000)
                 self.val_dataset = self.val_dataset.batch(self.batch_size_ph)
-                self.val_iterator = \
+                self.val_iter = \
                     self.val_dataset.make_initializable_iterator()
 
-                self.input_tensor, self.labels_tensor = tf.cond(
-                    self.val_ph,
-                    self.val_iterator.get_next,
-                    self.train_iterator.get_next
+                self.infer_dataset = tf.data.Dataset.from_tensor_slices(
+                    (self.features_data_ph, self.labels_data_ph)
+                )
+                self.infer_iter = \
+                    self.infer_dataset.make_initializable_iterator()
+
+                self.input_tensor, self.labels_tensor = tf.case(
+                    {
+                        tf.equal(self.mode_ph, 0): self.train_iter.get_next,
+                        tf.equal(self.mode_ph, 1): self.val_iter.get_next,
+                        tf.equal(self.mode_ph, 2): self.infer_iter.get_next,
+                    }
                 )
 
     def build(self):
@@ -270,7 +307,8 @@ class Trainer(object):
                     self.hp.decay_steps,
                     self.hp.decay_rate)
                 optimizer = tf.train.AdamOptimizer(learning_rate)
-                gradients = tf.gradients(self.model.loss, tf.trainable_variables())
+                gradients = tf.gradients(
+                    self.model.loss, tf.trainable_variables())
                 clipped_gradients, _ = tf.clip_by_global_norm(
                     gradients, self.hp.max_grad_norm)
                 grads_and_vars = tuple(
@@ -305,7 +343,7 @@ class Trainer(object):
             self.val_writer = tf.summary.FileWriter(
                 str(self.hp.dir / 'tensorboard' / 'val'))
 
-    def initialize_iterators(self, is_val=False):
+    def initialize_iterators(self, is_val=False, inference_data=None):
         """Initializes the train and validation iterators from
         the Processers' data
 
@@ -313,32 +351,43 @@ class Trainer(object):
                 the validation (True) or training (False) iterator
         """
         with self.graph.as_default():
-            if is_val:
-                feats = self.val_proc.features
-                labs = self.val_proc.labels
+            if inference_data:
+                feats = inference_data
+                labs = np.zeros(feats.shape)
                 bs = len(feats)
                 self.sess.run(
-                    self.val_iterator.initializer,
+                    self.infer_iter.initializer,
                     feed_dict={
-                        self.val_ph: True,
+                        self.mode_ph: 2,
                         self.features_data_ph: feats,
                         self.labels_data_ph: labs,
                         self.batch_size_ph: bs,
-                        self.keep_prob_dropout_ph: 1.0
+                    }
+                )
+            if is_val:
+                self.val_feats = self.val_proc.features
+                self.val_labs = self.val_proc.labels
+                self.val_bs = len(self.val_feats)
+                self.sess.run(
+                    self.val_iter.initializer,
+                    feed_dict={
+                        self.mode_ph: 1,
+                        self.features_data_ph: self.val_feats,
+                        self.labels_data_ph: self.val_labs,
+                        self.batch_size_ph: self.val_bs,
                     }
                 )
             else:
-                feats = self.train_proc.features
-                labs = self.train_proc.labels
-                bs = self.hp.batch_size
+                self.train_feats = self.train_proc.features
+                self.train_labs = self.train_proc.labels
+                self.train_bs = self.hp.batch_size
                 self.sess.run(
-                    self.train_iterator.initializer,
+                    self.train_iter.initializer,
                     feed_dict={
-                        self.val_ph: False,
-                        self.features_data_ph: feats,
-                        self.labels_data_ph: labs,
-                        self.batch_size_ph: bs,
-                        self.keep_prob_dropout_ph: self.hp.dropout
+                        self.mode_ph: 0,
+                        self.features_data_ph: self.train_feats,
+                        self.labels_data_ph: self.train_labs,
+                        self.batch_size_ph: self.train_bs,
                     }
                 )
 
@@ -379,6 +428,15 @@ class Trainer(object):
         print('OK.')
         self.prepared = True
 
+    def infer(self, features):
+        self.initialize_iterators(inference_data=features)
+        return self.model.prediction.run(
+            session=self.sess,
+            feed_dict={
+                self.mode_ph: 2,
+            }
+        )
+
     def validate(self, force=False):
         """Runs a validation step according to the current
         global_step, i.e. if step % hp.val_every == 0
@@ -413,8 +471,7 @@ class Trainer(object):
                 self.weighted_f1
             ],
             feed_dict={
-                self.val_ph: True,
-                self.keep_prob_dropout_ph: 1.0
+                self.mode_ph: 1,
             }
         )
         self.val_writer.add_summary(summary, self.global_step)
@@ -454,8 +511,7 @@ class Trainer(object):
                                 self.global_step_var,
                             ],
                             feed_dict={
-                                self.val_ph: False,
-                                self.keep_prob_dropout_ph: self.hp.dropout
+                                self.mode_ph: 0,
                             }
                         )
                         self.global_step = gs

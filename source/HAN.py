@@ -3,6 +3,9 @@ import numpy as np
 from Model import Model
 from utils import bidirectional_rnn, task_specific_attention
 
+MultiRNNCell = tf.nn.rnn_cell.MultiRNNCell
+GRUCell = tf.nn.rnn_cell.GRUCell
+
 
 class HAN(Model):
 
@@ -13,10 +16,10 @@ class HAN(Model):
         self.batch = None
         self.docs = None
         self.sents = None
-        self.sent_cell_fw = tf.nn.rnn_cell.GRUCell(self.hp.cell_size)
-        self.sent_cell_bw = tf.nn.rnn_cell.GRUCell(self.hp.cell_size)
-        self.doc_cell_fw = tf.nn.rnn_cell.GRUCell(self.hp.cell_size)
-        self.doc_cell_bw = tf.nn.rnn_cell.GRUCell(self.hp.cell_size)
+        self.sent_cell_fw = MultiRNNCell([GRUCell(self.hp.cell_size)] * 1)
+        self.sent_cell_bw = MultiRNNCell([GRUCell(self.hp.cell_size)] * 1)
+        self.doc_cell_fw = MultiRNNCell([GRUCell(self.hp.cell_size)] * 1)
+        self.doc_cell_bw = MultiRNNCell([GRUCell(self.hp.cell_size)] * 1)
         self.val_ph = None
         self.embedded_inputs = None
         self.embedded_sentences = None
@@ -32,6 +35,7 @@ class HAN(Model):
         self.prediction = None
         self.embedding_words = None
         self.doc_lengths = None
+        self.is_training = None
 
     def set_logits(self):
         with tf.variable_scope('unstack-lengths'):
@@ -89,8 +93,8 @@ class HAN(Model):
             with tf.variable_scope('dropout'):
                 self.sentence_output = tf.contrib.layers.dropout(
                     self.attended_sentences,
-                    keep_prob=self.keep_prob_dropout_ph,
-                    is_training=tf.logical_not(self.val_ph),
+                    keep_prob=self.hp.dropout,
+                    is_training=self.is_training,
                 )
 
         with tf.variable_scope('doc-level'):
@@ -117,8 +121,8 @@ class HAN(Model):
 
             with tf.variable_scope('dropout'):
                 self.doc_output = tf.contrib.layers.dropout(
-                    self.attended_docs, keep_prob=self.keep_prob_dropout_ph,
-                    is_training=tf.logical_not(self.val_ph),
+                    self.attended_docs, keep_prob=self.hp.dropout,
+                    is_training=self.is_training,
                 )
 
         with tf.variable_scope('classifier'):
