@@ -74,7 +74,7 @@ class HP(object):
             epochs=3,
             learning_rate=1e-2,
             max_grad_norm=5.0,
-            max_words=2.5e6,
+            max_words=1e5,
             multilabel=True,
             num_classes=69,
             save_steps=1000,
