@@ -6,6 +6,9 @@ from pathlib import Path
 from time import time
 import shutil
 import numpy as np
+import Hyperparameter as hyp
+import json
+from tensorflow.python.saved_model import tag_constants
 
 
 def strtime(ref):
@@ -43,7 +46,8 @@ class Trainer(object):
         hp = trainer.hp
         hp.assign_new_dir()
         return Trainer(
-            hp, trainer.model_type, processers=[trainer.train_proc, trainer.val_proc])
+            hp, trainer.model_type, processers=[
+                trainer.train_proc, trainer.val_proc])
 
     @staticmethod
     def f1_score(y_true, y_pred):
@@ -94,7 +98,8 @@ class Trainer(object):
                  model=None,
                  graph=None,
                  sess=None,
-                 processers=None):
+                 processers=None,
+                 restoring=False):
         """Creates a Trainer.
 
         Args:
@@ -127,7 +132,7 @@ class Trainer(object):
             self.model = model
         else:
             raise ValueError('Invalid model')
-        self.hp = trainer_hp
+        self.hp = trainer_hp or hyp.HP()
 
         self.new_procs = True
         if processers:
@@ -165,7 +170,6 @@ class Trainer(object):
         self.train_writer = None
         self.val_writer = None
         self.global_step_var = None
-        self.global_step = None
         self.train_start_time = None
         self.micro_f1 = None
         self.macro_f1 = None
@@ -176,19 +180,74 @@ class Trainer(object):
         self.train_feats = None
         self.train_labs = None
         self.train_bs = None
+        self.saver = None
 
+        if not restoring:
+            with self.graph.as_default():
+                self.global_step_var = tf.get_variable(
+                    'global_step',
+                    [],
+                    initializer=tf.constant_initializer(0),
+                    dtype=tf.int32,
+                    trainable=False
+                )
+                self.batch_size_ph = tf.placeholder(tf.int64)
+                self.mode_ph = tf.placeholder(tf.int32, name='mode_ph')
+                self.model.mode_ph = self.mode_ph
+                self.model.is_training = tf.equal(self.mode_ph, 0)
+
+    def save(self, simple_save=True):
         with self.graph.as_default():
-            self.global_step_var = tf.get_variable(
-                'global_step',
-                [],
-                initializer=tf.constant_initializer(0),
-                dtype=tf.int32,
-                trainable=False
+            if simple_save:
+                inputs = {
+                    "mode_ph": self.mode_ph,
+                    "batch_size_ph": self.batch_size_ph,
+                    "features_data_ph": self.features_data_ph,
+                    "labels_data_ph": self.labels_data_ph
+                }
+                outputs = {"prediction": self.model.prediction}
+                tf.saved_model.simple_save(
+                    self.sess, self.hp.dir, inputs, outputs
+                )
+                self.hp.dump(to='json')
+                with open(self.hp.dir / 'simple_saved_mapping.json', "w") as f:
+                    json.dump({
+                        'inputs': {
+                            k: str(v).split('"')[1] for k, v in inputs.items()
+                        },
+                        'outputs': {
+                            k: str(v).split('"')[1] for k, v in outputs.items()
+                        }}, f)
+            else:
+                self.saver = tf.train.Saver(tf.global_variables())
+                self.saver.save(
+                    self.sess,
+                    self.hp.dir,
+                    global_step=self.hp.global_step)
+
+    @staticmethod
+    def restore(checkpoint_dir, hp_name='', hp_ext='json', simple_save=True):
+        if simple_save:
+            checkpoint_dir = Path(checkpoint_dir)
+            hp = hyp.HP.load(checkpoint_dir, hp_name, hp_ext)
+            trainer = Trainer(hp, 'HAN', restoring=True)
+            tf.saved_model.loader.load(
+                trainer.sess,
+                [tag_constants.SERVING],
+                str(checkpoint_dir)
             )
-            self.batch_size_ph = tf.placeholder(tf.int64)
-            self.mode_ph = tf.placeholder(tf.int32, name='mode_ph')
-            self.model.mode_ph = self.mode_ph
-            self.model.is_training = tf.equal(self.mode_ph, 0)
+            mapping_path = checkpoint_dir / 'simple_saved_mapping.json'
+            with open(mapping_path, 'r') as f:
+                mapping = json.load(f)
+            for k, v in mapping['inputs'].items():
+                setattr(trainer, 'k', trainer.graph.get_tensor_by_name(v))
+            setattr(
+                trainer.model, 'prediction',
+                trainer.graph.get_tensor_by_name(mapping['outputs']['prediction']))
+            return trainer
+        else:
+            saver = tf.train.Saver(tf.global_variables())
+            checkpoint = tf.train.get_checkpoint_state(checkpoint_dir)
 
     def delete(self, ask=True):
         """Delete the trainer's directory after asking for confiirmation
@@ -198,6 +257,31 @@ class Trainer(object):
         """
         if not ask or 'y' in input('Are you sure? (y/n)'):
             shutil.rmtree(self.hp.dir)
+
+    def translate(self, batch):
+        docs = []
+        for d in batch:
+            sentences = []
+            for s in d:
+                if s.sum() > 0:
+                    sentences.append(
+                        [self.train_proc.reversed_vocab[w]
+                            for w in s if w > 0]
+                    )
+            docs.append(sentences)
+        return docs
+
+    def display(self, batch, labels=None):
+        if labels is None:
+            labels = [None] * len(batch)
+        elif len(labels.shape) > 1:
+            labels = np.where(labels > 0)[1]
+        docs = self.translate(batch)
+        return '###\n\n'.join(
+            ['Rating: {}'.format(labels[i]) + '\n'.join(
+                [' '.join([w for w in s]) for s in d]
+            ) for i, d in enumerate(docs)]
+        )
 
     def set_procs(self):
         voc = None
@@ -274,13 +358,18 @@ class Trainer(object):
                 self.infer_iter = \
                     self.infer_dataset.make_initializable_iterator()
 
-                self.input_tensor, self.labels_tensor = tf.case(
-                    {
-                        tf.equal(self.mode_ph, 0): self.train_iter.get_next,
-                        tf.equal(self.mode_ph, 1): self.val_iter.get_next,
-                        tf.equal(self.mode_ph, 2): self.infer_iter.get_next,
-                    }
+                self.input_tensor, self.labels_tensor = tf.cond(
+                    tf.equal(self.mode_ph, 0),
+                    self.train_iter.get_next,
+                    self.val_iter.get_next
                 )
+
+    def get_input_pair(self, is_val=False):
+        self.initialize_iterators(is_val)
+        return self.sess.run(
+            [self.input_tensor, self.labels_tensor],
+            feed_dict={self.mode_ph: int(is_val)}
+        )
 
     def build(self):
         """Performs the graph manipulations to create the trainer:
@@ -351,20 +440,20 @@ class Trainer(object):
                 the validation (True) or training (False) iterator
         """
         with self.graph.as_default():
-            if inference_data:
+            if inference_data is not None:
                 feats = inference_data
-                labs = np.zeros(feats.shape)
+                labs = np.zeros((len(feats), self.hp.num_classes))
                 bs = len(feats)
                 self.sess.run(
-                    self.infer_iter.initializer,
+                    self.val_iter.initializer,
                     feed_dict={
-                        self.mode_ph: 2,
+                        self.mode_ph: 1,
                         self.features_data_ph: feats,
                         self.labels_data_ph: labs,
                         self.batch_size_ph: bs,
                     }
                 )
-            if is_val:
+            elif is_val:
                 self.val_feats = self.val_proc.features
                 self.val_labs = self.val_proc.labels
                 self.val_bs = len(self.val_feats)
@@ -424,16 +513,16 @@ class Trainer(object):
         print('Ok. Building graph...')
         self.build()
         print('Ok. Saving hp...')
-        self.hp.dump()
+        self.hp.dump(to='json')
         print('OK.')
         self.prepared = True
 
     def infer(self, features):
         self.initialize_iterators(inference_data=features)
-        return self.model.prediction.run(
+        return self.model.prediction.eval(
             session=self.sess,
             feed_dict={
-                self.mode_ph: 2,
+                self.mode_ph: 1,
             }
         )
 
@@ -450,14 +539,14 @@ class Trainer(object):
         # Validate every n examples so every n/batch_size batchs
         val_every = self.hp.val_every // self.hp.batch_size
 
-        if self.global_step == 0:
+        if self.hp.global_step == 0:
             # don't validate on first step eventhough
-            # self.global_step % val_every == 0
+            # self.hp.global_step% val_every == 0
             return ''
 
-        if (not force) and self.global_step % val_every != 0:
+        if (not force) and self.hp.global_step % val_every != 0:
             # validate if force eventhough
-            # self.global_step % val_every != 0
+            # self.hp.global_step% val_every != 0
             return ''
 
         self.initialize_iterators(is_val=True)
@@ -514,11 +603,10 @@ class Trainer(object):
                                 self.mode_ph: 0,
                             }
                         )
-                        self.global_step = gs
+                        self.hp.global_step = gs
                         self.train_writer.add_summary(
                             summary,
-                            self.global_step
-                        )
+                            self.hp.global_step)
                         self.train_writer.flush()
 
                         val_string = self.validate()
@@ -537,7 +625,7 @@ class Trainer(object):
                         if stop:
                             break
             # End of epochs
-            if self.global_step % self.hp.val_every != 0:
+            if self.hp.global_step % self.hp.val_every != 0:
                 # print final validation if not done at the end
                 # of last epoch
                 print('\n[{}] Finally {}'.format(
