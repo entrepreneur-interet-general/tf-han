@@ -28,7 +28,7 @@ class HP(object):
             raise TypeError("Type %s not serializable" % type(obj))
 
     @staticmethod
-    def load(path_to_HP, file_type="pickle"):
+    def load(path_to_HP, name='', file_type="json"):
         """Static method: returns a HP object, located at path_to_HP.
         If path_to_HP is a directory, will return the first .pkl file
 
@@ -48,7 +48,8 @@ class HP(object):
         if path.is_dir():
             files = [
                 f for f in path.iterdir()
-                if ext in str(f)
+                if ext in str(f) and
+                '%s_hp' % name in str(f)
             ]
             if not files:
                 raise FileNotFoundError('No %s file in provided path' % ext)
@@ -71,19 +72,20 @@ class HP(object):
             decay_rate=0.99,
             dropout=0.5,
             embedding_file="",
-            epochs=3,
+            epochs=20,
+            global_step=0,
             learning_rate=1e-2,
             max_grad_norm=5.0,
             max_words=1e5,
-            multilabel=True,
-            num_classes=69,
+            multilabel=False,
+            num_classes=5,
             save_steps=1000,
             summary_secs=1000,
             trainable_embedding_matrix=False,
-            val_data_path='../data/toy/test',
+            val_data_path='/Users/victor/Documents/Tracfin/dev/han/data/yelp/sample_0001_val_01.json',
             val_batch_size=1000,
-            train_data_path='../data/toy',
-            val_every=100,
+            train_data_path='/Users/victor/Documents/Tracfin/dev/han/data/yelp/sample_0001_train_07.json',
+            val_every=15000,
             version='v1',
     ):
 
@@ -113,6 +115,7 @@ class HP(object):
         self.max_grad_norm = max_grad_norm
         self.decay_steps = decay_steps
         self.decay_rate = decay_rate
+        self.global_step = global_step
 
         self._max_sent_len = None
         self._max_doc_len = None
