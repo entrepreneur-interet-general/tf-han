@@ -116,6 +116,7 @@ class Processer(object):
         self.stop_words = [',', '"', "'"]
         self.embedded_data = None
         self.vocab = None
+        self.reversed_vocab = None
         self.labels = None
         self.features = None
         self.doc_lengths = None
@@ -283,6 +284,7 @@ class Processer(object):
                     end='\r')
 
         self.vocab = vocab
+        self.reversed_vocab = {v: k for k, v in vocab.items()}
         self.vocab_size = len(vocab)
         return embedded_data
 
