@@ -134,14 +134,19 @@ class HAN(Model):
 
     def set_embedding_matrix(self, emb_matrix):
         self.np_embedding_matrix = emb_matrix
-
-        assert self.np_embedding_matrix is not None
-
-        self.embedding_matrix = tf.get_variable(
-            'embedding_matrix',
-            shape=self.np_embedding_matrix.shape,
-            initializer=tf.constant_initializer(
-                self.np_embedding_matrix
-            ),
-            trainable=self.hp.trainable_embedding_matrix
-        )
+        if emb_matrix:
+            self.embedding_matrix = tf.get_variable(
+                'embedding_matrix',
+                shape=self.np_embedding_matrix.shape,
+                initializer=tf.constant_initializer(
+                    self.np_embedding_matrix
+                ),
+                trainable=self.hp.trainable_embedding_matrix
+            )
+        else:
+            self.embedding_matrix = tf.get_variable(
+                'random_embedding',
+                shape=(self.hp.vocab_size, self.hp.embedding_dim),
+                initializer=tf.random_normal_initializer,
+                trainable=True
+            )
