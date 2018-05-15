@@ -173,7 +173,10 @@ class Trainer(object):
                     "features_data_ph": self.features_data_ph,
                     "labels_data_ph": self.labels_data_ph
                 }
-                outputs = {"prediction": self.model.prediction}
+                outputs = {
+                    "prediction": self.model.prediction,
+                    "logits": self.model.logits
+                }
                 tf.saved_model.simple_save(
                     self.sess, str(self.hp.dir / 'checkpoints' /
                                    'simple'), inputs, outputs
@@ -210,12 +213,15 @@ class Trainer(object):
                 mapping = json.load(f)
             for k, v in mapping['inputs'].items():
                 setattr(trainer, k, trainer.graph.get_tensor_by_name(v))
-            setattr(
-                trainer.model, 'prediction',
-                trainer.graph.get_tensor_by_name(
-                    mapping['outputs']['prediction']
-                ))
+            for k, v in mapping['outputs'].items():
+                setattr(trainer.model, k, trainer.graph.get_tensor_by_name(v))
             trainer.make_datasets()
+            trainer.restored_iter = tf.data.Iterator.from_string_handle(
+                trainer.eval("datasets/val/IteratorToStringHandle:0"),
+                (tf.int32, tf.int32)
+            )
+            _next = trainer.restored_iter.get_next()
+            trainer.input_tensor, trainer.labels_tensor = _next
         else:
             hp = hyp.HP.load(checkpoint_dir, hp_name, hp_ext)
             trainer = Trainer('HAN', hp, restored=True)
@@ -438,15 +444,20 @@ class Trainer(object):
                 feats = inference_data
                 labs = np.zeros((len(feats), self.hp.num_classes))
                 bs = len(feats)
-                self.sess.run(
-                    self.val_iter.initializer,
-                    feed_dict={
-                        self.mode_ph: 1,
-                        self.features_data_ph: feats,
-                        self.labels_data_ph: labs,
-                        self.batch_size_ph: bs,
-                    }
-                )
+                fd = {
+                    self.mode_ph: 1,
+                    self.features_data_ph: feats,
+                    self.labels_data_ph: labs,
+                    self.batch_size_ph: bs,
+                }
+                if self.hp.restored:
+                    self.sess.run(
+                        self.restored_iter.initializer,
+                        feed_dict=fd)
+                else:
+                    self.sess.run(
+                        self.val_iter.initializer,
+                        feed_dict=fd)
                 print('Iterator ready to infer')
             elif is_val:
                 self.val_feats = self.val_proc.features
@@ -512,21 +523,26 @@ class Trainer(object):
         print('OK.')
         self.prepared = True
 
-    def infer(self, features, logits=True):
-        # self.initialize_iterators(inference_data=features)
-        self.sess.run(tf.assign(self.input_tensor, features))
-        if self.hp.restored:
-            fd = {
-                self.graph.get_tensor_by_name('mode_ph:0'): 1
-            }
-        else:
-            fd = {self.mode_ph: 1}
-        if logits:
-            return self.model.logits.eval(
+    def infer(self, features, with_logits=True):
+        self.initialize_iterators(inference_data=features)
+        # self.sess.run(tf.assign(self.input_tensor, features))
+        # if self.hp.restored:
+        #     fd = {
+        #         self.graph.get_tensor_by_name('mode_ph:0'): 1
+        #     }
+        #     prediction = self.graph.get_tensor_by_name('prediction:0')
+        #     logits = self.graph.get_tensor_by_name('logits:0')
+        # else:
+        fd = {self.mode_ph: 1}
+        prediction = self.model.prediction
+        logits = self.model.logits
+
+        if with_logits:
+            return logits.eval(
                 session=self.sess,
                 feed_dict=fd
             )
-        return self.model.prediction.eval(
+        return prediction.eval(
             session=self.sess,
             feed_dict=fd
         )
@@ -643,7 +659,7 @@ class Trainer(object):
                             metrics = self.validate()
                             if gs % 100 == 0:
                                 self.inferences.append(
-                                    self.infer(self.ref_feats)
+                                    self.ref_feats
                                 )
 
                         except tf.errors.OutOfRangeError:
