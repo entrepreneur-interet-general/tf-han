@@ -1,7 +1,7 @@
 tf7/
 data/
 .vscode/
-checkpoints/
+models/
 .env
 .DS_Store
 *__pycache__*
