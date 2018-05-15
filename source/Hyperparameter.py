@@ -3,6 +3,7 @@ import pathlib
 import datetime
 import pickle as pkl
 import json
+from utils import is_prop
 
 
 class HP(object):
@@ -11,8 +12,8 @@ class HP(object):
     def from_dict(dic):
         h = HP()
         for k, v in dic.items():
-            if k not in {'dir'}:
-                h.__setattr__(k, v)
+            if k not in {'dir'} and not is_prop(h, k):
+                setattr(h, k, v)
         h.set_dir(h._path)
         return h
 
@@ -25,7 +26,9 @@ class HP(object):
                 return obj.isoformat()
             if isinstance(obj, pathlib.Path):
                 return str(obj)
-            raise TypeError("Type %s not serializable" % type(obj))
+            if 'numpy' in str(type(obj)):
+                return obj.tolist()
+            raise TypeError("(HP) Type %s not serializable" % type(obj))
 
     @staticmethod
     def load(path_to_HP, name='', file_type="json"):
@@ -61,32 +64,36 @@ class HP(object):
             with path.open('r') as f:
                 jhp = json.load(f)
             hp = HP.from_dict(jhp)
+
+        hp.restored = True
         return hp
 
     def __init__(
             self,
             base_dir_name=None,
             batch_size=32,
-            cell_size=50,
+            cell_size=100,
             decay_steps=10,
-            decay_rate=0.99,
+            decay_rate=0.98,
             dropout=0.5,
             embedding_file="",
             epochs=20,
             global_step=0,
-            learning_rate=1e-2,
+            learning_rate=1e-3,
             max_grad_norm=5.0,
             max_words=1e5,
             multilabel=False,
             num_classes=5,
+            restored=False,
+            retrained=False,
             save_steps=1000,
             summary_secs=1000,
             trainable_embedding_matrix=False,
-            val_data_path='/Users/victor/Documents/Tracfin/dev/han/data/yelp/sample_0001_val_01.json',
             val_batch_size=1000,
-            train_data_path='/Users/victor/Documents/Tracfin/dev/han/data/yelp/sample_0001_train_07.json',
-            val_every=15000,
+            val_every=5000,
             version='v1',
+            val_data_path='/Users/victor/Documents/Tracfin/dev/han/data/yelp/sample_0001_val_01.json',
+            train_data_path='/Users/victor/Documents/Tracfin/dev/han/data/yelp/sample_0001_train_07.json',
     ):
 
         now = datetime.datetime.now()
@@ -116,6 +123,8 @@ class HP(object):
         self.decay_steps = decay_steps
         self.decay_rate = decay_rate
         self.global_step = global_step
+        self.restored = restored
+        self.retrained = retrained
 
         self._max_sent_len = None
         self._max_doc_len = None
@@ -135,11 +144,12 @@ class HP(object):
             str: string representation of the hyperparameter
         """
         return '\n'.join(
-            '{:25s} : {:10s}'.format(k, str(self.__getattribute__(k)))
+            '{:25s} : {:10s}'.format(k, str(getattr(self, k)))
             for k in sorted(dir(self))
             if '__' not in k and
             k not in self._str_no_k and
-            not callable(self.__getattribute__(k))
+            not callable(getattr(self, k)) and
+            not is_prop(self, k)
         )
 
     def __repr__(self):
@@ -152,10 +162,11 @@ class HP(object):
 
     def safe_dict(self):
         d = {
-            k: self.__getattribute__(k)
+            k: getattr(self, k)
             for k in sorted(dir(self))
             if k not in self._str_no_k and
-            not callable(self.__getattribute__(k)) and
+            not is_prop(self, k) and
+            not callable(getattr(self, k)) and
             '__' not in k
         }
         return d
@@ -204,7 +215,7 @@ class HP(object):
         """Returns a pathlib object whith the parameter's directory.
         If it's the first time the dir is accessed, it is created.
         Cannonical path is:
-        currentworkingdirectory/checkpoints/
+        currentworkingdirectory/models/
             <self.version>/<self.base_dir_name>_<new_index>
 
         Returns:
@@ -212,7 +223,7 @@ class HP(object):
         """
         cwd = os.getcwd()
         cpath = pathlib.Path(cwd).parent
-        ckpt_dir = cpath / 'checkpoints'
+        ckpt_dir = cpath / 'models'
         path = ckpt_dir / self.version
         if not path.exists():
             path.mkdir(parents=True)
