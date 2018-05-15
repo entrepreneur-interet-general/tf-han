@@ -143,3 +143,62 @@ def f1_score(y_true, y_pred):
 
 def is_prop(obj, attr):
     return isinstance(getattr(type(obj), attr, None), property)
+
+
+def get_graph_op(graph, and_conds=None, op='and', or_conds=None):
+    """Selects nodes' names in the graph if:
+    * The name contains all items in and_conds
+    * OR/AND depending on op
+    * The name contains any item in or_conds
+
+    Condition starting with a "!" are negated.
+    Returns all ops if no optional arguments is given.
+
+    Args:
+        graph (tf.Graph): The graph containing sought tensors
+        and_conds (list(str)), optional): Defaults to None.
+            "and" conditions
+        op (str, optional): Defaults to 'and'. 
+            How to link the and_conds and or_conds:
+            with an 'and' or an 'or'
+        or_conds (list(str), optional): Defaults to None.
+            "or conditions"
+
+    Returns:
+        list(str): list of relevant tensor names
+    """
+    assert op in {'and', 'or'}
+
+    if and_conds is None:
+        and_conds = ['']
+    if or_conds is None:
+        or_conds = ['']
+
+    node_names = [n.name for n in graph.as_graph_def().node]
+
+    ands = {
+        n for n in node_names
+        if all(
+            cond in n if '!' not in cond
+            else cond[1:] not in n
+            for cond in and_conds
+        )}
+
+    ors = {
+        n for n in node_names
+        if any(
+            cond in n if '!' not in cond
+            else cond[1:] not in n
+            for cond in or_conds
+        )}
+
+    if op == 'and':
+        return [
+            n for n in node_names
+            if n in ands.intersection(ors)
+        ]
+    elif op == 'or':
+        return [
+            n for n in node_names
+            if n in ands.union(ors)
+        ]
