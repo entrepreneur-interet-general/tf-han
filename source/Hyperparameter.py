@@ -71,11 +71,11 @@ class HP(object):
     def __init__(
             self,
             base_dir_name=None,
-            batch_size=32,
+            batch_size=64,
             cell_size=100,
             decay_steps=10,
-            decay_rate=0.98,
-            dropout=0.5,
+            decay_rate=0.99,
+            dropout=0.6,
             embedding_file="",
             epochs=20,
             global_step=0,
@@ -92,8 +92,8 @@ class HP(object):
             val_batch_size=1000,
             val_every=5000,
             version='v1',
-            val_data_path='/Users/victor/Documents/Tracfin/dev/han/data/yelp/sample_0001_val_01.json',
-            train_data_path='/Users/victor/Documents/Tracfin/dev/han/data/yelp/sample_0001_train_07.json',
+            val_data_path='/Users/victor/Documents/Tracfin/dev/han/data/yelp/sample_001_val_01.json',
+            train_data_path='/Users/victor/Documents/Tracfin/dev/han/data/yelp/sample_001_train_07.json',
     ):
 
         now = datetime.datetime.now()
