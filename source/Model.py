@@ -31,6 +31,7 @@ class Model(object):
         self.prediction = None
         self.input_tensor = None
         self.labels_tensor = None
+        self.one_hot_prediction = None
 
         self.graph = graph or tf.Graph()
 
@@ -62,7 +63,7 @@ class Model(object):
         regression by applying sigmoid_cross_entropy_with_logits
         """
         with self.graph.as_default():
-            with tf.name_scope('loss'):
+            with tf.variable_scope('loss'):
                 if self.hp.multilabel:
                     self.loss = tf.reduce_mean(
                         tf.nn.sigmoid_cross_entropy_with_logits(
@@ -89,9 +90,13 @@ class Model(object):
             labels_tensor (tf.Variable): batch x num_classes
         """
         with self.graph.as_default():
-            with tf.name_scope('model'):
+            with tf.variable_scope('model'):
                 self.input_tensor = input_tensor
                 self.labels_tensor = tf.cast(labels_tensor, tf.float32)
                 self.set_embedding_matrix(emb_matrix)
                 self.set_logits()
                 self.set_loss()
+                self.one_hot_prediction = tf.one_hot(
+                    self.prediction,
+                    self.hp.num_classes
+                )
