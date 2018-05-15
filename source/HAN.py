@@ -130,9 +130,9 @@ class HAN(Model):
                 self.doc_output, self.hp.num_classes, activation=None)
 
             self.prediction = tf.sigmoid(self.logits) \
-                if self.hp.multilabel else tf.argmax(self.logits)
+                if self.hp.multilabel else tf.argmax(self.logits, axis=1)
 
-    def set_embedding_matrix(self, emb_matrix):
+    def set_embedding_matrix(self, emb_matrix=None):
         self.np_embedding_matrix = emb_matrix
         if emb_matrix:
             self.embedding_matrix = tf.get_variable(
