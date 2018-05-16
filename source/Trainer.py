@@ -161,6 +161,8 @@ class Trainer(object):
             )
             self.batch_size_ph = tf.placeholder(tf.int64, name='batch_size_ph')
             self.mode_ph = tf.placeholder(tf.int32, name='mode_ph')
+            self.shuffle_val_ph = tf.placeholder(
+                tf.bool, name='shuffle_val_ph')
             self.model.mode_ph = self.mode_ph
             self.model.is_training = tf.equal(self.mode_ph, 0)
 
@@ -171,7 +173,8 @@ class Trainer(object):
                     "mode_ph": self.mode_ph,
                     "batch_size_ph": self.batch_size_ph,
                     "features_data_ph": self.features_data_ph,
-                    "labels_data_ph": self.labels_data_ph
+                    "labels_data_ph": self.labels_data_ph,
+                    "shuffle_val_ph": self.shuffle_val_ph,
                 }
                 outputs = {
                     "prediction": self.model.prediction,
@@ -182,6 +185,11 @@ class Trainer(object):
                                    'simple'), inputs, outputs
                 )
                 self.hp.dump(to='json')
+                ops = {
+                    'val_dataset_init_op': self.val_dataset_init_op,
+                    'infer_dataset_init_op': self.infer_dataset_init_op,
+                    'train_dataset_init_op': self.train_dataset_init_op
+                }
                 with open(self.hp.dir / 'simple_saved_mapping.json', "w") as f:
                     json.dump({
                         'inputs': {
@@ -189,6 +197,9 @@ class Trainer(object):
                         },
                         'outputs': {
                             k: str(v).split('"')[1] for k, v in outputs.items()
+                        },
+                        'ops': {
+                            k: str(v).split('"')[1] for k, v in ops.items()
                         }}, f)
             if ckpt_save:
                 self.saver = tf.train.Saver(tf.global_variables())
@@ -213,15 +224,11 @@ class Trainer(object):
                 mapping = json.load(f)
             for k, v in mapping['inputs'].items():
                 setattr(trainer, k, trainer.graph.get_tensor_by_name(v))
+            for k, v in mapping['ops'].items():
+                setattr(trainer, k, trainer.graph.get_operation_by_name(v))
             for k, v in mapping['outputs'].items():
                 setattr(trainer.model, k, trainer.graph.get_tensor_by_name(v))
-            trainer.make_datasets()
-            trainer.restored_iter = tf.data.Iterator.from_string_handle(
-                trainer.eval("datasets/val/IteratorToStringHandle:0"),
-                (tf.int32, tf.int32)
-            )
-            _next = trainer.restored_iter.get_next()
-            trainer.input_tensor, trainer.labels_tensor = _next
+
         else:
             hp = hyp.HP.load(checkpoint_dir, hp_name, hp_ext)
             trainer = Trainer('HAN', hp, restored=True)
@@ -337,31 +344,67 @@ class Trainer(object):
                         buffer_size=100000)
                     self.train_dataset = self.train_dataset.batch(
                         self.batch_size_ph)
-                    self.train_iter = \
-                        self.train_dataset.make_initializable_iterator()
+                    self.train_iter = tf.data.Iterator.from_structure(
+                        self.train_dataset.output_types,
+                        self.train_dataset.output_shapes
+                    )
+                    self.train_dataset_init_op = \
+                        self.train_iter.make_initializer(
+                            self.train_dataset,
+                            name='train_dataset_init_op'
+                        )
 
                 with tf.variable_scope('val'):
                     self.val_dataset = tf.data.Dataset.from_tensor_slices(
                         (self.features_data_ph, self.labels_data_ph)
                     )
                     self.val_dataset = self.val_dataset.shuffle(
-                        buffer_size=100000)
+                            buffer_size=100000)
                     self.val_dataset = self.val_dataset.batch(
                         self.batch_size_ph)
-                    self.val_iter = \
-                        self.val_dataset.make_initializable_iterator()
+                    self.val_iter = tf.data.Iterator.from_structure(
+                        self.val_dataset.output_types,
+                        self.val_dataset.output_shapes
+                    )
+                    self.val_dataset_init_op = \
+                        self.val_iter.make_initializer(
+                            self.val_dataset,
+                            name='val_dataset_init_op'
+                        )
+                with tf.variable_scope('infer'):
+                    self.infer_dataset = tf.data.Dataset.from_tensor_slices(
+                        (self.features_data_ph, self.labels_data_ph)
+                    )
+                    self.infer_dataset = self.infer_dataset.batch(
+                        self.batch_size_ph)
+                    self.infer_iter = tf.data.Iterator.from_structure(
+                        self.infer_dataset.output_types,
+                        self.infer_dataset.output_shapes
+                    )
+                    self.infer_dataset_init_op = \
+                        self.infer_iter.make_initializer(
+                            self.infer_dataset,
+                            name='infer_dataset_init_op'
+                        )
 
                 self.input_tensor, self.labels_tensor = tf.cond(
                     tf.equal(self.mode_ph, 0),
                     self.train_iter.get_next,
-                    self.val_iter.get_next
+                    lambda: tf.cond(
+                        self.shuffle_val_ph,
+                        self.val_iter.get_next,
+                        self.infer_iter.get_next
+                    )
                 )
 
-    def get_input_pair(self, is_val=False):
+    def get_input_pair(self, is_val=False, shuffle_val=True):
         self.initialize_iterators(is_val)
         return self.sess.run(
             [self.input_tensor, self.labels_tensor],
-            feed_dict={self.mode_ph: int(is_val)}
+            feed_dict={
+                self.mode_ph: int(is_val),
+                self.shuffle_val_ph: True
+            }
         )
 
     def build(self):
@@ -444,32 +487,29 @@ class Trainer(object):
                 feats = inference_data
                 labs = np.zeros((len(feats), self.hp.num_classes))
                 bs = len(feats)
-                fd = {
-                    self.mode_ph: 1,
-                    self.features_data_ph: feats,
-                    self.labels_data_ph: labs,
-                    self.batch_size_ph: bs,
-                }
-                if self.hp.restored:
-                    self.sess.run(
-                        self.restored_iter.initializer,
-                        feed_dict=fd)
-                else:
-                    self.sess.run(
-                        self.val_iter.initializer,
-                        feed_dict=fd)
+                self.sess.run(
+                    self.infer_dataset_init_op,
+                    feed_dict={
+                        self.mode_ph: 1,
+                        self.features_data_ph: feats,
+                        self.labels_data_ph: labs,
+                        self.batch_size_ph: bs,
+                        self.shuffle_val_ph: False
+                    }
+                )
                 print('Iterator ready to infer')
             elif is_val:
                 self.val_feats = self.val_proc.features
                 self.val_labs = self.val_proc.labels
                 self.val_bs = len(self.val_feats)
                 self.sess.run(
-                    self.val_iter.initializer,
+                    self.val_dataset_init_op,
                     feed_dict={
                         self.mode_ph: 1,
                         self.features_data_ph: self.val_feats,
                         self.labels_data_ph: self.val_labs,
                         self.batch_size_ph: self.val_bs,
+                        self.shuffle_val_ph: True
                     }
                 )
             else:
@@ -477,12 +517,13 @@ class Trainer(object):
                 self.train_labs = self.train_proc.labels
                 self.train_bs = self.hp.batch_size
                 self.sess.run(
-                    self.train_iter.initializer,
+                    self.train_dataset_init_op,
                     feed_dict={
                         self.mode_ph: 0,
                         self.features_data_ph: self.train_feats,
                         self.labels_data_ph: self.train_labs,
                         self.batch_size_ph: self.train_bs,
+                        self.shuffle_val_ph: True
                     }
                 )
 
@@ -533,7 +574,7 @@ class Trainer(object):
         #     prediction = self.graph.get_tensor_by_name('prediction:0')
         #     logits = self.graph.get_tensor_by_name('logits:0')
         # else:
-        fd = {self.mode_ph: 1}
+        fd = {self.mode_ph: 1, self.shuffle_val_ph: False}
         prediction = self.model.prediction
         logits = self.model.logits
 
@@ -582,6 +623,7 @@ class Trainer(object):
             ],
             feed_dict={
                 self.mode_ph: 1,
+                self.shuffle_val_ph: True
             }
         )
         self.val_writer.add_summary(s, self.hp.global_step)
@@ -648,6 +690,7 @@ class Trainer(object):
                                 ],
                                 feed_dict={
                                     self.mode_ph: 0,
+                                    self.shuffle_val_ph: True
                                 }
                             )
                             self.hp.global_step = gs
