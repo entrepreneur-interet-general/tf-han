@@ -3,10 +3,19 @@ import shutil
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.saved_model import tag_constants
-from utils import get_graph_op
 
 
 def model(graph, input_tensor):
+    """Create the model which consists of
+    a bidirectional rnn (GRU(10)) folowed by a dense classifier
+
+    Args:
+        graph (tf.Graph): Tensors' graph
+        input_tensor (tf.Tensor): Tensor fed as input to the model
+
+    Returns:
+        tf.Tensor: the model's output layer Tensor
+    """
     cell = tf.nn.rnn_cell.GRUCell(10)
     with graph.as_default():
         ((fw_outputs,
@@ -28,32 +37,50 @@ def model(graph, input_tensor):
         return dense
 
 
-if __name__ == '__main__':
+def get_opt_op(graph, logits, labels_tensor):
+    """Create optimization operation from model's logits and labels
 
+    Args:
+        graph (tf.Graph): Tensors' graph
+        logits (tf.Tensor): The model's output without activation
+        labels_tensor (tf.Tensor): Target labels
+
+    Returns:
+        tf.Operation: the operation performing a stem of Adam optimizer
+    """
+    with graph.as_default():
+        with tf.variable_scope('loss'):
+            loss = tf.reduce_mean(
+                tf.nn.softmax_cross_entropy_with_logits(
+                    logits=logits,
+                    labels=labels_tensor,
+                    name='xent'),
+                name="mean-xent")
+        with tf.variable_scope('optimizer'):
+            opt_op = tf.train.AdamOptimizer(1e-2).minimize(loss)
+        return opt_op
+
+
+if __name__ == '__main__':
+    # Set random seed for reproductability
+    # and create synthetic data
     np.random.seed(0)
     features = np.random.randn(64, 10, 30)
     labels = np.eye(5)[np.random.randint(0, 5, (64,))]
 
     graph1 = tf.Graph()
     with graph1.as_default():
+        # Random seed for reproductability
         tf.set_random_seed(0)
         # Placeholders
         batch_size_ph = tf.placeholder(tf.int64, name='batch_size_ph')
         features_data_ph = tf.placeholder(
-            tf.float32,
-            [None, None, 30],
-            'features_data_ph'
-        )
+            tf.float32, [None, None, 30], 'features_data_ph')
         labels_data_ph = tf.placeholder(
-            tf.int32,
-            [None, 5],
-            'labels_data_ph'
-        )
+            tf.int32, [None, 5], 'labels_data_ph')
         # Dataset
         dataset = tf.data.Dataset.from_tensor_slices(
             (features_data_ph, labels_data_ph))
-        dataset = dataset.shuffle(
-            buffer_size=100000)
         dataset = dataset.batch(
             batch_size_ph)
         iterator = tf.data.Iterator.from_structure(
@@ -62,13 +89,18 @@ if __name__ == '__main__':
             dataset, name='dataset_init')
         input_tensor, labels_tensor = iterator.get_next()
 
-        output = model(graph1, input_tensor)
+        # Model
+        logits = model(graph1, input_tensor)
+        # Optimization
+        opt_op = get_opt_op(graph1, logits, labels_tensor)
 
         with tf.Session(graph=graph1) as sess:
-
+            # Initialize variables
             tf.global_variables_initializer().run(session=sess)
-            for epoch in range(2):
+            for epoch in range(3):
                 batch = 0
+                # Initialize dataset
+                # (could feed epochs in Dataset.repeat(epochs))
                 sess.run(
                     dataset_init_op,
                     feed_dict={
@@ -79,10 +111,19 @@ if __name__ == '__main__':
                 )
                 while True:
                     try:
-                        print(epoch, batch, sess.run(output)[0])
-                        batch += 1
+                        if epoch < 2:
+                            # Training
+                            _, values = sess.run([opt_op, logits])
+                            print(epoch, batch, values[0])
+                            batch += 1
+                        else:
+                            # Final inference
+                            values = sess.run(logits)
+                            print(epoch, batch, values[0])
+                            batch += 1
                     except tf.errors.OutOfRangeError:
                         break
+            # Save model state
             cwd = os.getcwd()
             path = os.path.join(cwd, 'test_simple')
             shutil.rmtree(path, ignore_errors=True)
@@ -92,7 +133,7 @@ if __name__ == '__main__':
                 "labels_data_ph": labels_data_ph
             }
             outputs_dict = {
-                "output": output
+                "logits": logits
             }
             tf.saved_model.simple_save(
                 sess, path, inputs_dict, outputs_dict
@@ -101,18 +142,22 @@ if __name__ == '__main__':
     graph2 = tf.Graph()
     with graph2.as_default():
         with tf.Session(graph=graph2) as sess:
+            # Restore saved values
             tf.saved_model.loader.load(
                 sess,
                 [tag_constants.SERVING],
                 path
             )
-            l = get_graph_op(graph2, ['!bidir'])
-            dataset_init_op = graph2.get_operation_by_name('dataset_init')
-            logits = graph2.get_tensor_by_name('dense/BiasAdd:0')
+            # Get restored placeholders
             labels_data_ph = graph2.get_tensor_by_name('labels_data_ph:0')
             features_data_ph = graph2.get_tensor_by_name('features_data_ph:0')
             batch_size_ph = graph2.get_tensor_by_name('batch_size_ph:0')
+            # Get restored model output
+            restored_logits = graph2.get_tensor_by_name('dense/BiasAdd:0')
+            # Get dataset initializing operation
+            dataset_init_op = graph2.get_operation_by_name('dataset_init')
 
+            # Initialize restored dataset
             sess.run(
                 dataset_init_op,
                 feed_dict={
@@ -120,5 +165,12 @@ if __name__ == '__main__':
                     labels_data_ph: labels,
                     batch_size_ph: 32
                 }
+
             )
-            print(sess.run(logits)[0])
+            # Compute inference for both batches in dataset
+            for _ in range(2):
+                restored_values = sess.run(restored_logits)
+                print(restored_values[0])
+    # Check if original inference and restored inference are equal
+    valid = (values == restored_values).all()
+    print('\nInferences match: ', valid)
