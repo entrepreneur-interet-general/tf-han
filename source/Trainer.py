@@ -120,6 +120,9 @@ class Trainer(object):
         self.saver = None
         self.ref_feats = None
         self.ref_labs = None
+        self.val_dataset_init_op = None
+        self.infer_dataset_init_op = None
+        self.train_dataset_init_op = None
 
         if model_type == 'LogReg':
             self.model = LogReg(self.hp, self.graph)
