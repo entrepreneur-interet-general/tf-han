@@ -109,17 +109,18 @@ if __name__ == '__main__':
                         batch_size_ph: 32
                     }
                 )
+                values = []
                 while True:
                     try:
                         if epoch < 2:
                             # Training
-                            _, values = sess.run([opt_op, logits])
-                            print(epoch, batch, values[0])
+                            _, value = sess.run([opt_op, logits])
+                            print(epoch, batch, value[0])
                             batch += 1
                         else:
                             # Final inference
-                            values = sess.run(logits)
-                            print(epoch, batch, values[0])
+                            values.append(sess.run(logits))
+                            print(epoch, batch, values[-1][0])
                             batch += 1
                     except tf.errors.OutOfRangeError:
                         break
@@ -168,9 +169,10 @@ if __name__ == '__main__':
 
             )
             # Compute inference for both batches in dataset
-            for _ in range(2):
-                restored_values = sess.run(restored_logits)
-                print(restored_values[0])
+            restored_values = []
+            for i in range(2):
+                restored_values.append(sess.run(restored_logits))
+                print(restored_values[i][0])
     # Check if original inference and restored inference are equal
-    valid = (values == restored_values).all()
+    valid = all((v == rv).all() for v, rv in zip(values, restored_values))
     print('\nInferences match: ', valid)
