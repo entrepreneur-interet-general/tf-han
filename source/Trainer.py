@@ -615,9 +615,9 @@ class Trainer(object):
             val_string += "Acc {:.4f} Mi {:.4f} Ma {:.4f} We {:.4f}\n".format(
                 acc, mic, mac, wei
             )
-        epoch_string = "[{}] EPOCH {:2} / {:2} "
-        epoch_string += "Step {:5} Loss: {:.4f} "
-        epoch_string += "lr: {:.5f}"
+        epoch_string = "[{}] EPOCH {:2} / {:2} | "
+        epoch_string += "Step {:5} | Loss: {:.4f} | "
+        epoch_string += "lr: {:.5f} | "
         epoch_string = (
             epoch_string.format(
                 strtime(self.train_start_time),
