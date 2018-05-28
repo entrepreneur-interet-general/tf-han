@@ -1,11 +1,13 @@
-from pathlib import Path
 import pickle
-import ujson
-import numpy as np
-from collections import defaultdict, Counter
-import nltk
-from nltk.corpus import stopwords
+from collections import Counter
+from pathlib import Path
 from time import time
+
+import nltk
+import numpy as np
+from nltk.corpus import stopwords
+
+import ujson
 
 
 class Processer(object):

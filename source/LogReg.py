@@ -1,5 +1,5 @@
-from Model import Model
 import tensorflow as tf
+from Model import Model
 
 
 class LogReg(Model):
