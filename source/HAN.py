@@ -2,12 +2,23 @@ import tensorflow as tf
 import numpy as np
 from Model import Model
 from utils import bidirectional_rnn, task_specific_attention
+from tensorflow.python.client import device_lib
 
 MultiRNNCell = tf.nn.rnn_cell.MultiRNNCell
-GRUCell = tf.nn.rnn_cell.GRUCell
 
 
 class HAN(Model):
+
+    def get_rnn_cell(self):
+        config = tf.ConfigProto()
+        config.gpu_options.allow_growth = True
+        with tf.Session(config=config) as sess:
+            local_device_protos = device_lib.list_local_devices()
+            gpus = [x.name for x in local_device_protos if x.device_type == "GPU"]
+            print(gpus)
+        if gpus:
+            return tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(self.hp.cell_size)
+        return tf.nn.rnn_cell.GRUCell(self.hp.cell_size)
 
     def __init__(self, hp, graph=None):
         super().__init__(hp, graph)
@@ -16,10 +27,10 @@ class HAN(Model):
         self.batch = None
         self.docs = None
         self.sents = None
-        self.sent_cell_fw = MultiRNNCell([GRUCell(self.hp.cell_size)] * 1)
-        self.sent_cell_bw = MultiRNNCell([GRUCell(self.hp.cell_size)] * 1)
-        self.doc_cell_fw = MultiRNNCell([GRUCell(self.hp.cell_size)] * 1)
-        self.doc_cell_bw = MultiRNNCell([GRUCell(self.hp.cell_size)] * 1)
+        self.sent_cell_fw = MultiRNNCell([self.get_rnn_cell() for _ in range(3)])
+        self.sent_cell_bw = MultiRNNCell([self.get_rnn_cell() for _ in range(3)])
+        self.doc_cell_fw = MultiRNNCell([self.get_rnn_cell() for _ in range(3)])
+        self.doc_cell_bw = MultiRNNCell([self.get_rnn_cell() for _ in range(3)])
         self.val_ph = None
         self.embedded_inputs = None
         self.embedded_sentences = None
