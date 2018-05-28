@@ -43,7 +43,7 @@ class Model(object):
         Raises:
             NotImplementedError: Abstract method
         """
-        raise NotImplementedError('set_logits should be implemented')
+        raise NotImplementedError("set_logits should be implemented")
 
     def set_embedding_matrix(self, emb_matrix=None):
         """Should define how the model will lookup the indexes
@@ -55,29 +55,30 @@ class Model(object):
         Raises:
             NotImplementedError: Abstract method
         """
-        raise NotImplementedError(
-            'set_embedding_matrix should be implemented')
+        raise NotImplementedError("set_embedding_matrix should be implemented")
 
     def set_loss(self):
         """Creates the loss operation as a component-wise logistic
         regression by applying sigmoid_cross_entropy_with_logits
         """
         with self.graph.as_default():
-            with tf.variable_scope('loss'):
+            with tf.variable_scope("loss"):
                 if self.hp.multilabel:
                     self.loss = tf.reduce_mean(
                         tf.nn.sigmoid_cross_entropy_with_logits(
                             logits=self.logits,
                             labels=self.labels_tensor,
-                            name='sig-xent'),
-                        name="mean-sig-xent")
+                            name="sig-xent",
+                        ),
+                        name="mean-sig-xent",
+                    )
                 else:
                     self.loss = tf.reduce_mean(
                         tf.nn.softmax_cross_entropy_with_logits(
-                            logits=self.logits,
-                            labels=self.labels_tensor,
-                            name='xent'),
-                        name="mean-xent")
+                            logits=self.logits, labels=self.labels_tensor, name="xent"
+                        ),
+                        name="mean-xent",
+                    )
 
     def build(self, input_tensor, labels_tensor, emb_matrix=None):
         """Computes the major operations to create a model:
@@ -90,13 +91,12 @@ class Model(object):
             labels_tensor (tf.Variable): batch x num_classes
         """
         with self.graph.as_default():
-            with tf.variable_scope('model'):
+            with tf.variable_scope("model"):
                 self.input_tensor = input_tensor
                 self.labels_tensor = tf.cast(labels_tensor, tf.float32)
                 self.set_embedding_matrix(emb_matrix)
                 self.set_logits()
                 self.set_loss()
                 self.one_hot_prediction = tf.one_hot(
-                    self.prediction,
-                    self.hp.num_classes
+                    self.prediction, self.hp.num_classes
                 )

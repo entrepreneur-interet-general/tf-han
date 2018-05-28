@@ -6,56 +6,63 @@ except ImportError:
     LSTMStateTuple = tf.nn.rnn_cell.LSTMStateTuple
 
 
-def bidirectional_rnn(cell_fw, cell_bw, inputs_embedded, input_lengths,
-                      scope=None):
+def bidirectional_rnn(cell_fw, cell_bw, inputs_embedded, input_lengths, scope=None):
     # github.com/ematvey/hierarchical-attention-networks/blob/
     #   master/model_components.py
     """Bidirecional RNN with concatenated outputs and states"""
     with tf.variable_scope(scope or "birnn") as scope:
-        ((fw_outputs,
-          bw_outputs),
-         (fw_state,
-          bw_state)) = (
-            tf.nn.bidirectional_dynamic_rnn(cell_fw=cell_fw,
-                                            cell_bw=cell_bw,
-                                            inputs=inputs_embedded,
-                                            sequence_length=input_lengths,
-                                            dtype=tf.float32,
-                                            swap_memory=True,
-                                            scope=scope))
+        (
+            (fw_outputs, bw_outputs),
+            (fw_state, bw_state),
+        ) = tf.nn.bidirectional_dynamic_rnn(
+            cell_fw=cell_fw,
+            cell_bw=cell_bw,
+            inputs=inputs_embedded,
+            sequence_length=input_lengths,
+            dtype=tf.float32,
+            swap_memory=True,
+            scope=scope,
+        )
         outputs = tf.concat((fw_outputs, bw_outputs), 2)
 
         def concatenate_state(fw_state, bw_state):
             if isinstance(fw_state, LSTMStateTuple):
                 state_c = tf.concat(
-                    (fw_state.c, bw_state.c), 1, name='bidirectional_concat_c')
+                    (fw_state.c, bw_state.c), 1, name="bidirectional_concat_c"
+                )
                 state_h = tf.concat(
-                    (fw_state.h, bw_state.h), 1, name='bidirectional_concat_h')
+                    (fw_state.h, bw_state.h), 1, name="bidirectional_concat_h"
+                )
                 state = LSTMStateTuple(c=state_c, h=state_h)
                 return state
             elif isinstance(fw_state, tf.Tensor):
-                state = tf.concat((fw_state, bw_state), 1,
-                                  name='bidirectional_concat')
+                state = tf.concat((fw_state, bw_state), 1, name="bidirectional_concat")
                 return state
-            elif (isinstance(fw_state, tuple) and
-                    isinstance(bw_state, tuple) and
-                    len(fw_state) == len(bw_state)):
+            elif (
+                isinstance(fw_state, tuple)
+                and isinstance(bw_state, tuple)
+                and len(fw_state) == len(bw_state)
+            ):
                 # multilayer
-                state = tuple(concatenate_state(fw, bw)
-                              for fw, bw in zip(fw_state, bw_state))
+                state = tuple(
+                    concatenate_state(fw, bw) for fw, bw in zip(fw_state, bw_state)
+                )
                 return state
 
             else:
-                raise ValueError(
-                    'unknown state type: {}'.format((fw_state, bw_state)))
+                raise ValueError("unknown state type: {}".format((fw_state, bw_state)))
 
         state = concatenate_state(fw_state, bw_state)
         return outputs, state
 
 
-def task_specific_attention(inputs, output_size,
-                            initializer=tf.contrib.layers.xavier_initializer(),
-                            activation_fn=tf.tanh, scope=None):
+def task_specific_attention(
+    inputs,
+    output_size,
+    initializer=tf.contrib.layers.xavier_initializer(),
+    activation_fn=tf.tanh,
+    scope=None,
+):
     # github.com/ematvey/hierarchical-attention-networks/blob/
     #   master/model_components.py
     """
@@ -70,25 +77,23 @@ def task_specific_attention(inputs, output_size,
     Returns:
         outputs: Tensor of shape [batch_size, output_dim].
     """
-    assert len(inputs.get_shape()
-               ) == 3 and inputs.get_shape()[-1].value is not None
+    assert len(inputs.get_shape()) == 3 and inputs.get_shape()[-1].value is not None
 
-    with tf.variable_scope(scope or 'attention') as scope:
+    with tf.variable_scope(scope or "attention") as scope:
         attention_context_vector = tf.get_variable(
-            name='attention_context_vector',
+            name="attention_context_vector",
             shape=[output_size],
             initializer=initializer,
-            dtype=tf.float32
+            dtype=tf.float32,
         )
         input_projection = tf.contrib.layers.fully_connected(
-            inputs, output_size,
-            activation_fn=activation_fn,
-            scope=scope
+            inputs, output_size, activation_fn=activation_fn, scope=scope
         )
 
         vector_attn = tf.reduce_sum(
             tf.multiply(input_projection, attention_context_vector),
-            axis=2, keepdims=True
+            axis=2,
+            keepdims=True,
         )
         attention_weights = tf.nn.softmax(vector_attn, axis=1)
         weighted_projection = tf.multiply(input_projection, attention_weights)
@@ -145,7 +150,7 @@ def is_prop(obj, attr):
     return isinstance(getattr(type(obj), attr, None), property)
 
 
-def get_graph_op(graph, and_conds=None, op='and', or_conds=None):
+def get_graph_op(graph, and_conds=None, op="and", or_conds=None):
     """Selects nodes' names in the graph if:
     * The name contains all items in and_conds
     * OR/AND depending on op
@@ -167,38 +172,30 @@ def get_graph_op(graph, and_conds=None, op='and', or_conds=None):
     Returns:
         list(str): list of relevant tensor names
     """
-    assert op in {'and', 'or'}
+    assert op in {"and", "or"}
 
     if and_conds is None:
-        and_conds = ['']
+        and_conds = [""]
     if or_conds is None:
-        or_conds = ['']
+        or_conds = [""]
 
     node_names = [n.name for n in graph.as_graph_def().node]
 
     ands = {
-        n for n in node_names
+        n
+        for n in node_names
         if all(
-            cond in n if '!' not in cond
-            else cond[1:] not in n
-            for cond in and_conds
-        )}
+            cond in n if "!" not in cond else cond[1:] not in n for cond in and_conds
+        )
+    }
 
     ors = {
-        n for n in node_names
-        if any(
-            cond in n if '!' not in cond
-            else cond[1:] not in n
-            for cond in or_conds
-        )}
+        n
+        for n in node_names
+        if any(cond in n if "!" not in cond else cond[1:] not in n for cond in or_conds)
+    }
 
-    if op == 'and':
-        return [
-            n for n in node_names
-            if n in ands.intersection(ors)
-        ]
-    elif op == 'or':
-        return [
-            n for n in node_names
-            if n in ands.union(ors)
-        ]
+    if op == "and":
+        return [n for n in node_names if n in ands.intersection(ors)]
+    elif op == "or":
+        return [n for n in node_names if n in ands.union(ors)]

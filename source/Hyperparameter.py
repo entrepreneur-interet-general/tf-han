@@ -12,7 +12,7 @@ class HP(object):
     def from_dict(dic):
         h = HP()
         for k, v in dic.items():
-            if k not in {'dir'} and not is_prop(h, k):
+            if k not in {"dir"} and not is_prop(h, k):
                 setattr(h, k, v)
         h.set_dir(h._path)
         return h
@@ -26,12 +26,12 @@ class HP(object):
                 return obj.isoformat()
             if isinstance(obj, pathlib.Path):
                 return str(obj)
-            if 'numpy' in str(type(obj)):
+            if "numpy" in str(type(obj)):
                 return obj.tolist()
             raise TypeError("(HP) Type %s not serializable" % type(obj))
 
     @staticmethod
-    def load(path_to_HP, name='', file_type="json"):
+    def load(path_to_HP, name="", file_type="json"):
         """Static method: returns a HP object, located at path_to_HP.
         If path_to_HP is a directory, will return the first .pkl file
 
@@ -44,24 +44,22 @@ class HP(object):
         path = pathlib.Path(path_to_HP)
         to = file_type if file_type in ["pickle", "json"] else "pickle"
         if to == "pickle":
-            ext = '.pkl'
+            ext = ".pkl"
         else:
-            ext = '.json'
+            ext = ".json"
 
         if path.is_dir():
             files = [
-                f for f in path.iterdir()
-                if ext in str(f) and
-                '%s_hp' % name in str(f)
+                f for f in path.iterdir() if ext in str(f) and "%s_hp" % name in str(f)
             ]
             if not files:
-                raise FileNotFoundError('No %s file in provided path' % ext)
+                raise FileNotFoundError("No %s file in provided path" % ext)
             path = files[0]
         if to == "pickle":
-            with path.open('rb') as f:
+            with path.open("rb") as f:
                 hp = pkl.load(f)
         else:
-            with path.open('r') as f:
+            with path.open("r") as f:
                 jhp = json.load(f)
             hp = HP.from_dict(jhp)
 
@@ -69,36 +67,36 @@ class HP(object):
         return hp
 
     def __init__(
-            self,
-            base_dir_name=None,
-            batch_size=64,
-            cell_size=10,
-            decay_steps=10,
-            decay_rate=0.99,
-            dropout=0.6,
-            embedding_file="",
-            epochs=20,
-            global_step=0,
-            learning_rate=1e-3,
-            max_grad_norm=5.0,
-            max_words=1e5,
-            multilabel=False,
-            num_classes=5,
-            restored=False,
-            retrained=False,
-            save_steps=1000,
-            summary_secs=1000,
-            trainable_embedding_matrix=False,
-            val_batch_size=1000,
-            val_every=5000,
-            version='v1',
-            val_data_path='/Users/victor/Documents/Tracfin/dev/han/data/yelp/sample_0001_val_01.json',
-            train_data_path='/Users/victor/Documents/Tracfin/dev/han/data/yelp/sample_0001_train_07.json',
+        self,
+        base_dir_name=None,
+        batch_size=64,
+        cell_size=10,
+        decay_steps=10,
+        decay_rate=0.99,
+        dropout=0.6,
+        embedding_file="",
+        epochs=20,
+        global_step=0,
+        learning_rate=1e-3,
+        max_grad_norm=5.0,
+        max_words=1e5,
+        multilabel=False,
+        num_classes=5,
+        restored=False,
+        retrained=False,
+        save_steps=1000,
+        summary_secs=1000,
+        trainable_embedding_matrix=False,
+        val_batch_size=1000,
+        val_every=5000,
+        version="v1",
+        val_data_path="/Users/victor/Documents/Tracfin/dev/han/data/yelp/sample_0001_val_01.json",
+        train_data_path="/Users/victor/Documents/Tracfin/dev/han/data/yelp/sample_0001_train_07.json",
     ):
 
         now = datetime.datetime.now()
-        self._str_no_k = ['dir']
-        self._path = ''
+        self._str_no_k = ["dir"]
+        self._path = ""
         self.created_at = int(now.timestamp())
         self.base_dir_name = base_dir_name or str(now)[:10]
 
@@ -143,13 +141,13 @@ class HP(object):
         Returns:
             str: string representation of the hyperparameter
         """
-        return '\n'.join(
-            '{:25s} : {:10s}'.format(k, str(getattr(self, k)))
+        return "\n".join(
+            "{:25s} : {:10s}".format(k, str(getattr(self, k)))
             for k in sorted(dir(self))
-            if '__' not in k and
-            k not in self._str_no_k and
-            not callable(getattr(self, k)) and
-            not is_prop(self, k)
+            if "__" not in k
+            and k not in self._str_no_k
+            and not callable(getattr(self, k))
+            and not is_prop(self, k)
         )
 
     def __repr__(self):
@@ -158,40 +156,40 @@ class HP(object):
         Returns:
             str: <<classname> self.id>
         """
-        return '<%s %s>' % (self.__class__, self.id)
+        return "<%s %s>" % (self.__class__, self.id)
 
     def safe_dict(self):
         d = {
             k: getattr(self, k)
             for k in sorted(dir(self))
-            if k not in self._str_no_k and
-            not is_prop(self, k) and
-            not callable(getattr(self, k)) and
-            '__' not in k
+            if k not in self._str_no_k
+            and not is_prop(self, k)
+            and not callable(getattr(self, k))
+            and "__" not in k
         }
         return d
 
-    def dump(self, name='', to="json"):
+    def dump(self, name="", to="json"):
         """Dumps the Hyperparameter as a pickle file in hp.dir as:
         <name> + _hp.pkl
 
             name (str, optional): Defaults to ''. details to add to the
             default filename
         """
-        to = to if to in["pickle", "json", "all"] else "pickle"
+        to = to if to in ["pickle", "json", "all"] else "pickle"
         if to in ["pickle", "all"]:
-            ext = '.pkl'
-            file_name = '%s_hp%s' % (name, ext)
+            ext = ".pkl"
+            file_name = "%s_hp%s" % (name, ext)
             location = self.dir / file_name
-            with location.open('wb') as f:
+            with location.open("wb") as f:
                 pkl.dump(self, f)
             if to == "all":
                 to = "json"
         if to == "json":
-            ext = '.json'
-            file_name = '%s_hp%s' % (name, ext)
+            ext = ".json"
+            file_name = "%s_hp%s" % (name, ext)
             location = self.dir / file_name
-            with location.open('w') as f:
+            with location.open("w") as f:
                 json.dump(self.safe_dict(), f, default=self.json_serial)
 
     def set_dir(self, path):
@@ -223,23 +221,28 @@ class HP(object):
         """
         cwd = os.getcwd()
         cpath = pathlib.Path(cwd).parent
-        ckpt_dir = cpath / 'models'
+        ckpt_dir = cpath / "models"
         path = ckpt_dir / self.version
         if not path.exists():
             path.mkdir(parents=True)
 
         if not self.path_initialized:
             paths = [
-                p.resolve() for p in path.iterdir()
-                if p.is_dir() and
-                self.base_dir_name in str(p)
+                p.resolve()
+                for p in path.iterdir()
+                if p.is_dir() and self.base_dir_name in str(p)
             ]
             if paths:
-                _id = max(
-                    [0] + [
-                        int(str(p).split("_")[-1] if '_' in str(p) else "0")
-                        for p in paths]
-                ) + 1
+                _id = (
+                    max(
+                        [0]
+                        + [
+                            int(str(p).split("_")[-1] if "_" in str(p) else "0")
+                            for p in paths
+                        ]
+                    )
+                    + 1
+                )
                 new_name = "{}_{}".format(self.base_dir_name, _id)
             else:
                 new_name = self.base_dir_name
@@ -261,7 +264,7 @@ class HP(object):
     def max_sent_len(self):
         if self._max_sent_len:
             return self._max_sent_len
-        raise ValueError('Set max_sent_len first')
+        raise ValueError("Set max_sent_len first")
 
     def set_max_sent_len(self, length):
         self._max_sent_len = length
@@ -270,7 +273,7 @@ class HP(object):
     def max_doc_len(self):
         if self._max_doc_len:
             return self._max_doc_len
-        raise ValueError('Set max_doc_len first')
+        raise ValueError("Set max_doc_len first")
 
     def set_max_doc_len(self, length):
         self._max_doc_len = length
@@ -279,7 +282,7 @@ class HP(object):
     def vocab_size(self):
         if self._vocab_size:
             return self._vocab_size
-        raise ValueError('Set vocab_size first')
+        raise ValueError("Set vocab_size first")
 
     def set_vocab_size(self, length):
         self._vocab_size = length
@@ -288,17 +291,12 @@ class HP(object):
     def embedding_dim(self):
         if self._embedding_dim:
             return self._embedding_dim
-        raise ValueError('Set embedding_dim first')
+        raise ValueError("Set embedding_dim first")
 
     def set_embedding_dim(self, length):
         self._embedding_dim = length
 
-    def set_data_values(
-            self,
-            doc_len,
-            sent_len,
-            vocab_size,
-            emb_dim):
+    def set_data_values(self, doc_len, sent_len, vocab_size, emb_dim):
         self.set_embedding_dim(emb_dim)
         self.set_max_doc_len(doc_len)
         self.set_max_sent_len(sent_len)

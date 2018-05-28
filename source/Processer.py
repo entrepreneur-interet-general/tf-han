@@ -13,25 +13,27 @@ class Processer(object):
     @staticmethod
     def build_word_vector_matrix(vector_file, n_words):
         n_words = int(n_words)
-        with open(vector_file, 'r') as f:
-            print('Loading file...', end='\r')
+        with open(vector_file, "r") as f:
+            print("Loading file...", end="\r")
             lines = f.readlines()
-            print('{:20}'.format(' '))
-        vectors = np.zeros((
-            min([len(lines), n_words]) if n_words else len(lines),
-            len(lines[0].split()[1:])
-        ))
+            print("{:20}".format(" "))
+        vectors = np.zeros(
+            (
+                min([len(lines), n_words]) if n_words else len(lines),
+                len(lines[0].split()[1:]),
+            )
+        )
         words = {}
         for i, l in enumerate(lines):
             if i == n_words:
-                print('Reached max_words: stopping here (%d).' % i)
+                print("Reached max_words: stopping here (%d)." % i)
                 break
             values = l.split()
             try:
                 vectors[i, :] = np.array(values[1:]).astype(np.float32)
                 words[values[0]] = i
             except ValueError:
-                print('Ignored vector: ', values[:10], '...')
+                print("Ignored vector: ", values[:10], "...")
 
         return words, vectors
 
@@ -50,12 +52,8 @@ class Processer(object):
             tuple(int): max number of sentences in a doc,
             max number of words in a sentence
         """
-        max_doc_len = max(
-            len(d) for d in data
-        )
-        max_sent_len = max(
-            len(s) for d in data for s in d
-        )
+        max_doc_len = max(len(d) for d in data)
+        max_sent_len = max(len(s) for d in data for s in d)
         return max_doc_len, max_sent_len
 
     @staticmethod
@@ -87,19 +85,17 @@ class Processer(object):
         """
         path = Path(path)
         proc = Processer()
-        with (path / 'attributes.json').open('rb') as f:
+        with (path / "attributes.json").open("rb") as f:
             attributes = ujson.load(f)
 
         for attr, val in attributes.items():
             proc.__setattr__(attr, val)
 
-        proc.features = np.loadtxt(
-            path / 'features.csv.gz'
-        ).reshape(attributes.features_shape)
-
-        proc.labels = np.loadtxt(
-            path / 'labels.csv.gz'
+        proc.features = np.loadtxt(path / "features.csv.gz").reshape(
+            attributes.features_shape
         )
+
+        proc.labels = np.loadtxt(path / "labels.csv.gz")
 
         return proc
 
@@ -113,7 +109,7 @@ class Processer(object):
         self.embedding_file = None
         self.data = None
         self.data_path = None
-        self.stop_words = [',', '"', "'"]
+        self.stop_words = [",", '"', "'"]
         self.embedded_data = None
         self.vocab = None
         self.reversed_vocab = None
@@ -132,7 +128,7 @@ class Processer(object):
             ValueError: if the Processer does not have data
         """
         if not self.data:
-            raise ValueError('No data in the Processer')
+            raise ValueError("No data in the Processer")
 
     def load_data(self, data_path, max_items_to_load=1e6):
         """Can load different types of data:
@@ -153,44 +149,38 @@ class Processer(object):
             max_items_to_load = 1e20
         path = Path().resolve()
         # If path is relative and contains ../ :
-        for _ in range(len(data_path.split('../')) - 1):
+        for _ in range(len(data_path.split("../")) - 1):
             path = path.parent
-        path /= data_path.split('../')[-1]
+        path /= data_path.split("../")[-1]
 
-        if 'toy' in str(data_path).split('/'):
+        if "toy" in str(data_path).split("/"):
             for fp in path.iterdir():
-                if not fp.is_dir() and fp.suffix == '.txt':
-                    with fp.open('r') as f:
+                if not fp.is_dir() and fp.suffix == ".txt":
+                    with fp.open("r") as f:
                         self.data += f.readlines()
-                if not fp.is_dir() and fp.suffix == '.pkl':
-                    with fp.open('rb') as f:
+                if not fp.is_dir() and fp.suffix == ".pkl":
+                    with fp.open("rb") as f:
                         self.labels = pickle.load(f)
-            self.data = [
-                l
-                for l in ''.join(self.data).split('\n\n')
-                if len(l) > 1
-            ]
-        if 'yelp' in str(data_path).split('/'):
-            with path.open('rb') as f:
+            self.data = [l for l in "".join(self.data).split("\n\n") if len(l) > 1]
+        if "yelp" in str(data_path).split("/"):
+            with path.open("rb") as f:
                 for i, line in enumerate(f):
                     if i == max_items_to_load:
-                        print('Reached max_items_to_load. Stopping')
+                        print("Reached max_items_to_load. Stopping")
                         break
                     review = ujson.loads(line)
-                    self.data.append(review['text'])
-                    self.labels.append(review['label'])
+                    self.data.append(review["text"])
+                    self.labels.append(review["label"])
                 self.labels = np.eye(5)[self.labels]
 
-    def delete_stop_words(self, language='english'):
+    def delete_stop_words(self, language="english"):
         """Lowers words in the data and ignores those in self.stop_words
         """
         self.assert_data()
         stop_words = set(stopwords.words(language))
         self.data = [
-            [
-                [word for word in sentence if word not in stop_words]
-                for sentence in doc
-            ] for doc in self.data
+            [[word for word in sentence if word not in stop_words] for sentence in doc]
+            for doc in self.data
         ]
 
     def split_into_sentences(self, max_sent_len=None):
@@ -200,19 +190,23 @@ class Processer(object):
         max_sent_len = max_sent_len or -1
         self.assert_data()
         self.data = [
-            nltk.sent_tokenize(doc, language='english')[:max_sent_len]
+            nltk.sent_tokenize(doc, language="english")[:max_sent_len]
             for doc in self.data
         ]
 
-    def tokenize_words(self, language='english'):
+    def tokenize_words(self, language="english"):
         self.data = [
-            [nltk.word_tokenize(s, language=language) for s in doc]
-            for doc in self.data
+            [nltk.word_tokenize(s, language=language) for s in doc] for doc in self.data
         ]
 
-    def embed(self, data, vocabulary=None, max_vocab_size=1e6,
-              max_sent_len=None,
-              max_doc_len=None):
+    def embed(
+        self,
+        data,
+        vocabulary=None,
+        max_vocab_size=1e6,
+        max_sent_len=None,
+        max_doc_len=None,
+    ):
         """Embeds self.data according to vocabulary. If none is provided,
         it is created on the fly and added to self.vocab
 
@@ -244,10 +238,7 @@ class Processer(object):
             self.max_doc_len = max_doc_len
             self.max_sent_len = max_sent_len
 
-        vocab = vocabulary or {
-            '<PAD>': 0,
-            '<OOV>': 1
-        }
+        vocab = vocabulary or {"<PAD>": 0, "<OOV>": 1}
 
         embedded_data = np.zeros((len(data), max_doc_len, max_sent_len))
         if vocabulary:
@@ -255,33 +246,24 @@ class Processer(object):
             for d, doc in enumerate(data):
                 for s, sentence in enumerate(doc):
                     for w, word in enumerate(sentence):
-                        embedded_data[d][s][w] = vocab.get(
-                            word, vocab['<OOV>'])
+                        embedded_data[d][s][w] = vocab.get(word, vocab["<OOV>"])
         else:
-            print('Creating vocab')
-            count = dict(
-                Counter(w for d in data for s in d for w in s)
-            )
+            print("Creating vocab")
+            count = dict(Counter(w for d in data for s in d for w in s))
             num_of_words = sum(list(count.values()))
-            frequent_words = sorted(
-                count, key=count.get, reverse=True
-            )[:max_vocab_size]
+            frequent_words = sorted(count, key=count.get, reverse=True)[:max_vocab_size]
             for word in frequent_words:
                 vocab[word] = len(vocab)
 
             set_vocab = set()
-            print('Embedding')
+            print("Embedding")
             _c = 0
             for d, doc in enumerate(data):
                 for s, sentence in enumerate(doc):
                     for w, word in enumerate(sentence):
-                        embedded_data[d][s][w] = vocab.get(
-                            word, vocab['<OOV>'])
+                        embedded_data[d][s][w] = vocab.get(word, vocab["<OOV>"])
                         _c += 1
-                print(
-                    '{:2}%'.format(
-                        _c * 100 // num_of_words),
-                    end='\r')
+                print("{:2}%".format(_c * 100 // num_of_words), end="\r")
 
         self.vocab = vocab
         self.reversed_vocab = {v: k for k, v in vocab.items()}
@@ -302,61 +284,58 @@ class Processer(object):
         stime = time()
         # If path is relative and contains ../ :
         save_path = str(save_path)
-        if '../' in save_path:
+        if "../" in save_path:
             path = Path()
-            for _ in range(len(save_path.split('../')) - 1):
+            for _ in range(len(save_path.split("../")) - 1):
                 path = path.parent
-            path /= save_path.split('../')[-1]
-        elif './' in save_path:
-            path = Path() / save_path.split('./')[-1]
+            path /= save_path.split("../")[-1]
+        elif "./" in save_path:
+            path = Path() / save_path.split("./")[-1]
         else:
             path = Path(save_path)
         path = path.resolve()
 
         if not path.is_dir():
-            print('Path should be a directory')
+            print("Path should be a directory")
 
         if not path.exists():
             path.mkdir(parents=True, exist_ok=True)
 
         np.savetxt(
             path / "features.csv.gz",
-            self.features.reshape(
-                (-1, self.features.shape[-1])
-            ).astype(int),
-            delimiter=","
+            self.features.reshape((-1, self.features.shape[-1])).astype(int),
+            delimiter=",",
         )
-        np.savetxt(
-            path / "labels.csv.gz",
-            self.labels.astype(int),
-            delimiter=","
-        )
-        with(path / "vocab.pkl").open('wb') as f:
+        np.savetxt(path / "labels.csv.gz", self.labels.astype(int), delimiter=",")
+        with (path / "vocab.pkl").open("wb") as f:
             pickle.dump(self.vocab, f)
 
         attributes = {
-            k: self.__getattribute__(k) for k in dir(self)
-            if isinstance(self.__getattribute__(k), int) or
-            isinstance(self.__getattribute__(k), float) or
-            isinstance(self.__getattribute__(k), str)
+            k: self.__getattribute__(k)
+            for k in dir(self)
+            if isinstance(self.__getattribute__(k), int)
+            or isinstance(self.__getattribute__(k), float)
+            or isinstance(self.__getattribute__(k), str)
         }
 
-        attributes['features_shape'] = list(self.features.shape)
+        attributes["features_shape"] = list(self.features.shape)
 
-        with(path / "attributes.json").open('w') as f:
+        with (path / "attributes.json").open("w") as f:
             ujson.dump(attributes, f)
 
-        print('OK %d s' % int(time() - stime))
+        print("OK %d s" % int(time() - stime))
 
-    def process(self,
-                data_path='../data/toy',
-                save_path='',
-                vocabulary=None,
-                max_sent_len=None,
-                max_doc_len=None,
-                max_vocab_size=1e6,
-                max_items_to_load=-1,
-                language='english'):
+    def process(
+        self,
+        data_path="../data/toy",
+        save_path="",
+        vocabulary=None,
+        max_sent_len=None,
+        max_doc_len=None,
+        max_vocab_size=1e6,
+        max_items_to_load=-1,
+        language="english",
+    ):
         """Main funciton executing the major processing
         steps for the data:
         * load the data
@@ -376,34 +355,34 @@ class Processer(object):
             max_vocab_size (number, optional): Defaults to 1e6. see embed
         """
         stime = time()
-        print('Loading Data..', end='')
+        print("Loading Data..", end="")
         self.load_data(data_path)
 
-        if 'toy' in str(self.data_path).split('/'):
-            print('OK %d. Splitting sentences..' % int(time() - stime), end='')
+        if "toy" in str(self.data_path).split("/"):
+            print("OK %d. Splitting sentences.." % int(time() - stime), end="")
             self.split_into_sentences(max_sent_len)
 
-            print('OK %d. Tokenizing..' % int(time() - stime), end='')
+            print("OK %d. Tokenizing.." % int(time() - stime), end="")
             self.tokenize_words(language)
 
-        print('OK %d. Deleting stop words..' % int(time() - stime), end='')
+        print("OK %d. Deleting stop words.." % int(time() - stime), end="")
         self.delete_stop_words(language)
 
-        print('OK %d. Embedding data..' % int(time() - stime))
+        print("OK %d. Embedding data.." % int(time() - stime))
         self.embedded_data = self.embed(
             self.data,
             vocabulary=vocabulary,
             max_vocab_size=max_vocab_size,
             max_sent_len=max_sent_len,
-            max_doc_len=max_doc_len
+            max_doc_len=max_doc_len,
         )
 
-        print('OK %d.' % int(time() - stime), end='')
+        print("OK %d." % int(time() - stime), end="")
 
         self.doc_lengths, self.sent_lengths = self.get_lengths(self.data)
         self.features = np.array(self.embedded_data)
         if save_path:
-            print('Saving Processer..', end='')
+            print("Saving Processer..", end="")
             self.save_processed(save_path)
-            print('OK.', end='')
+            print("OK.", end="")
         print()
