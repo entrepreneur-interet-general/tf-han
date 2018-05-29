@@ -15,7 +15,6 @@ class HAN(Model):
         with tf.Session(config=config) as sess:
             local_device_protos = device_lib.list_local_devices()
             gpus = [x.name for x in local_device_protos if x.device_type == "GPU"]
-            print(gpus)
         if gpus:
             return tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(self.hp.cell_size)
         return tf.nn.rnn_cell.GRUCell(self.hp.cell_size)
@@ -27,10 +26,10 @@ class HAN(Model):
         self.batch = None
         self.docs = None
         self.sents = None
-        self.sent_cell_fw = MultiRNNCell([self.get_rnn_cell() for _ in range(3)])
-        self.sent_cell_bw = MultiRNNCell([self.get_rnn_cell() for _ in range(3)])
-        self.doc_cell_fw = MultiRNNCell([self.get_rnn_cell() for _ in range(3)])
-        self.doc_cell_bw = MultiRNNCell([self.get_rnn_cell() for _ in range(3)])
+        self.sent_cell_fw = MultiRNNCell([self.get_rnn_cell() for _ in range(1)])
+        self.sent_cell_bw = MultiRNNCell([self.get_rnn_cell() for _ in range(1)])
+        self.doc_cell_fw = MultiRNNCell([self.get_rnn_cell() for _ in range(1)])
+        self.doc_cell_bw = MultiRNNCell([self.get_rnn_cell() for _ in range(1)])
         self.val_ph = None
         self.embedded_inputs = None
         self.embedded_sentences = None
