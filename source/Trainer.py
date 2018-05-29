@@ -138,7 +138,7 @@ class Trainer(object):
             assert len(processers) == 2
 
             if isinstance(processers[0], (str, Path)):
-                processers = [Path(p) for p in processers]
+                processers = [Path(p).resolve()() for p in processers]
                 self.train_proc = Processer.load(processers[0])
                 self.val_proc = Processer.load(processers[1])
             else:
@@ -218,7 +218,7 @@ class Trainer(object):
     @staticmethod
     def restore(checkpoint_dir, hp_name="", hp_ext="json", simple_save=True):
         if simple_save:
-            checkpoint_dir = Path(checkpoint_dir)
+            checkpoint_dir = Path(checkpoint_dir).resolve()()
             hp = hyp.HP.load(checkpoint_dir, hp_name, hp_ext)
             trainer = Trainer("HAN", hp, restored=True)
             tf.saved_model.loader.load(
@@ -317,7 +317,7 @@ class Trainer(object):
 
     def save_procs(self, path=None):
         path = path or self.hp.dir
-        path = Path(path)
+        path = Path(path).resolve()()
         self.train_proc.save(path / "train_proc.pkl")
         self.val_proc.save(path / "val_proc.pkl")
 

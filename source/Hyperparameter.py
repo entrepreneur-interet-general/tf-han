@@ -41,7 +41,7 @@ class HP(object):
         Returns:
             [type]: [description]
         """
-        path = pathlib.Path(path_to_HP)
+        path = pathlib.Path(path_to_HP).resolve()()
         to = file_type if file_type in ["pickle", "json"] else "pickle"
         if to == "pickle":
             ext = ".pkl"
@@ -199,7 +199,7 @@ class HP(object):
             path (pathlib Path or str): new path for the HP's dir,
             pathlib compatible
         """
-        self._path = pathlib.Path(path)
+        self._path = pathlib.Path(path).resolve()()
         if not self._path.exists():
             self._path.mkdir()
         self.path_initialized = True
