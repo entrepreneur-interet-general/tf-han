@@ -85,7 +85,7 @@ class Processer(object):
             Processer: loaded processer without its data attribute
             (to save disk space)
         """
-        path = Path(path).resolve()()
+        path = Path(path).resolve()
         proc = Processer()
         with (path / "attributes.json").open("rb") as f:
             attributes = ujson.load(f)
@@ -149,7 +149,7 @@ class Processer(object):
         self.max_items_to_load = int(max_items_to_load)
         if max_items_to_load == -1:
             max_items_to_load = 1e20
-        path = Path().resolve()()
+        path = Path().resolve()
         # If path is relative and contains ../ :
         for _ in range(len(data_path.split("../")) - 1):
             path = path.parent
@@ -284,7 +284,7 @@ class Processer(object):
             directory where to save the processer
         """
         stime = time()
-        path = Path(save_path).resolve()()
+        path = Path(save_path).resolve()
 
         if not path.is_dir():
             print("Path should be a directory")

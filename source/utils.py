@@ -5,6 +5,9 @@ try:
 except ImportError:
     LSTMStateTuple = tf.nn.rnn_cell.LSTMStateTuple
 
+split_doc_token = "|&|"
+padding_token = "<PAD>"
+
 
 def bidirectional_rnn(cell_fw, cell_bw, inputs_embedded, input_lengths, scope=None):
     # github.com/ematvey/hierarchical-attention-networks/blob/
@@ -199,3 +202,23 @@ def get_graph_op(graph, and_conds=None, op="and", or_conds=None):
         return [n for n in node_names if n in ands.intersection(ors)]
     elif op == "or":
         return [n for n in node_names if n in ands.union(ors)]
+
+
+def extract_words(string):
+    # Split string
+    out = tf.string_split(string, delimiter=" ")
+    # Convert to Dense tensor, filling with default value
+    # Which is the padding token in this case
+    out = tf.sparse_tensor_to_dense(out, default_value=padding_token)
+    return out
+
+
+def extract_sents(string):
+    # Split the document line into sentences
+    return tf.string_split([string], split_doc_token).values
+
+
+def one_hot_label(string_label):
+    # convert a string to a one-hot encoded label
+    # '3' > [0, 0, 0, 1, 0]
+    return tf.one_hot(tf.string_to_number(string_label, out_type=tf.int64), 5, 1, 0)
