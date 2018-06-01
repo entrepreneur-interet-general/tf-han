@@ -32,7 +32,6 @@ def strtime(ref):
 
 
 class Trainer(object):
-
     @staticmethod
     def initialize_from_trainer(trainer):
         """Creates a new Trainer instance from an
@@ -138,7 +137,7 @@ class Trainer(object):
             assert len(processers) == 2
 
             if isinstance(processers[0], (str, Path)):
-                processers = [Path(p).resolve()() for p in processers]
+                processers = [Path(p).resolve() for p in processers]
                 self.train_proc = Processer.load(processers[0])
                 self.val_proc = Processer.load(processers[1])
             else:
@@ -218,7 +217,7 @@ class Trainer(object):
     @staticmethod
     def restore(checkpoint_dir, hp_name="", hp_ext="json", simple_save=True):
         if simple_save:
-            checkpoint_dir = Path(checkpoint_dir).resolve()()
+            checkpoint_dir = Path(checkpoint_dir).resolve()
             hp = hyp.HP.load(checkpoint_dir, hp_name, hp_ext)
             trainer = Trainer("HAN", hp, restored=True)
             tf.saved_model.loader.load(
@@ -317,9 +316,45 @@ class Trainer(object):
 
     def save_procs(self, path=None):
         path = path or self.hp.dir
-        path = Path(path).resolve()()
+        path = Path(path).resolve()
         self.train_proc.save(path / "train_proc.pkl")
         self.val_proc.save(path / "val_proc.pkl")
+
+    def make_iterators(self):
+        with self.graph.as_default():
+            with tf.variable_scope("datasets"):
+                with tf.variable_scope("train"):
+                    self.train_iter = tf.data.Iterator.from_structure(
+                        self.train_dataset.output_types,
+                        self.train_dataset.output_shapes,
+                    )
+                    self.train_dataset_init_op = self.train_iter.make_initializer(
+                        self.train_dataset, name="train_dataset_init_op"
+                    )
+                with tf.variable_scope("val"):
+                    self.val_iter = tf.data.Iterator.from_structure(
+                        self.val_dataset.output_types, self.val_dataset.output_shapes
+                    )
+                    self.val_dataset_init_op = self.val_iter.make_initializer(
+                        self.val_dataset, name="val_dataset_init_op"
+                    )
+                with tf.variable_scope("infer"):
+                    self.infer_iter = tf.data.Iterator.from_structure(
+                        self.infer_dataset.output_types,
+                        self.infer_dataset.output_shapes,
+                    )
+                    self.infer_dataset_init_op = self.infer_iter.make_initializer(
+                        self.infer_dataset, name="infer_dataset_init_op"
+                    )
+                self.input_tensor, self.labels_tensor = tf.cond(
+                    self.is_training,
+                    self.train_iter.get_next,
+                    lambda: tf.cond(
+                        self.shuffle_val_ph,
+                        self.val_iter.get_next,
+                        self.infer_iter.get_next,
+                    ),
+                )
 
     def make_datasets(self):
         """Creates 2 datasets, one to train the other to validate the model.
@@ -342,13 +377,6 @@ class Trainer(object):
                     )
                     self.train_dataset = self.train_dataset.shuffle(buffer_size=100000)
                     self.train_dataset = self.train_dataset.batch(self.batch_size_ph)
-                    self.train_iter = tf.data.Iterator.from_structure(
-                        self.train_dataset.output_types,
-                        self.train_dataset.output_shapes,
-                    )
-                    self.train_dataset_init_op = self.train_iter.make_initializer(
-                        self.train_dataset, name="train_dataset_init_op"
-                    )
 
                 with tf.variable_scope("val"):
                     self.val_dataset = tf.data.Dataset.from_tensor_slices(
@@ -356,34 +384,12 @@ class Trainer(object):
                     )
                     self.val_dataset = self.val_dataset.shuffle(buffer_size=100000)
                     self.val_dataset = self.val_dataset.batch(self.batch_size_ph)
-                    self.val_iter = tf.data.Iterator.from_structure(
-                        self.val_dataset.output_types, self.val_dataset.output_shapes
-                    )
-                    self.val_dataset_init_op = self.val_iter.make_initializer(
-                        self.val_dataset, name="val_dataset_init_op"
-                    )
+
                 with tf.variable_scope("infer"):
                     self.infer_dataset = tf.data.Dataset.from_tensor_slices(
                         (self.features_data_ph, self.labels_data_ph)
                     )
                     self.infer_dataset = self.infer_dataset.batch(self.batch_size_ph)
-                    self.infer_iter = tf.data.Iterator.from_structure(
-                        self.infer_dataset.output_types,
-                        self.infer_dataset.output_shapes,
-                    )
-                    self.infer_dataset_init_op = self.infer_iter.make_initializer(
-                        self.infer_dataset, name="infer_dataset_init_op"
-                    )
-
-                self.input_tensor, self.labels_tensor = tf.cond(
-                    tf.equal(self.mode_ph, 0),
-                    self.train_iter.get_next,
-                    lambda: tf.cond(
-                        self.shuffle_val_ph,
-                        self.val_iter.get_next,
-                        self.infer_iter.get_next,
-                    ),
-                )
 
     def get_input_pair(self, is_val=False, shuffle_val=True):
         self.initialize_iterators(is_val)
@@ -411,6 +417,7 @@ class Trainer(object):
                 self.input_tensor,
                 self.labels_tensor,
                 self.train_proc.np_embedding_matrix,
+                self.hp.vocab_size,
             )
 
             with tf.variable_scope("optimization"):
@@ -543,6 +550,7 @@ class Trainer(object):
 
         print("Ok. Setting Datasets...")
         self.make_datasets()
+        self.make_iterators()
         print("Ok. Building graph...")
         self.build()
         print("Ok. Saving hp...")
@@ -605,6 +613,7 @@ class Trainer(object):
         )
         self.val_writer.add_summary(s, self.hp.global_step)
         self.val_writer.flush()
+        self.train_writer.flush()
         return acc, mic, mac, wei
 
     def epoch_string(self, epoch, loss, lr, metrics):
@@ -650,9 +659,7 @@ class Trainer(object):
             self.prepare()
             if not continue_training:
                 tf.global_variables_initializer().run(session=self.sess)
-                indexes = np.random.permutation(len(self.val_proc.features))[:20]
-                self.ref_feats = self.val_proc.features[indexes]
-                self.ref_labs = self.val_proc.labels[indexes]
+                tf.tables_initializer().run(session=self.sess)
             else:
                 self.initialize_uninitialized()
             try:
@@ -673,7 +680,6 @@ class Trainer(object):
                             )
                             self.hp.global_step = gs
                             self.train_writer.add_summary(summary, self.hp.global_step)
-                            self.train_writer.flush()
 
                             metrics = self.validate()
                             if gs % 100 == 0:

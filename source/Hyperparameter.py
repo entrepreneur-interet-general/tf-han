@@ -41,7 +41,7 @@ class HP(object):
         Returns:
             [type]: [description]
         """
-        path = pathlib.Path(path_to_HP).resolve()()
+        path = pathlib.Path(path_to_HP).resolve()
         to = file_type if file_type in ["pickle", "json"] else "pickle"
         if to == "pickle":
             ext = ".pkl"
@@ -82,16 +82,22 @@ class HP(object):
         max_words=1e5,
         multilabel=False,
         num_classes=5,
+        num_threads=4,
         restored=False,
         retrained=False,
         save_steps=1000,
         summary_secs=1000,
-        trainable_embedding_matrix=False,
+        trainable_embedding_matrix=True,
         val_batch_size=1000,
         val_every=5000,
         version="v1",
-        val_data_path="/Users/victor/Documents/Tracfin/dev/han/data/yelp/sample_0001_val_01.json",
-        train_data_path="/Users/victor/Documents/Tracfin/dev/han/data/yelp/sample_0001_train_07.json",
+        val_data_path="/Users/victor/Documents/Tracfin/dev/han/data/yelp/sampled/sample_0001_val_01.json",
+        train_data_path="/Users/victor/Documents/Tracfin/dev/han/data/yelp/sampled/sample_0001_train_07.json",
+        val_docs_file="/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_val_01/documents.txt",
+        val_labels_file="/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_val_01/labels.txt",
+        train_docs_file="/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_train_07/documents.txt",
+        train_labels_file="/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_train_07/labels.txt",
+        train_words_file="/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_train_07/words.txt",
     ):
 
         now = datetime.datetime.now()
@@ -123,6 +129,12 @@ class HP(object):
         self.global_step = global_step
         self.restored = restored
         self.retrained = retrained
+        self.val_docs_file = val_docs_file
+        self.val_labels_file = val_labels_file
+        self.train_docs_file = train_docs_file
+        self.train_labels_file = train_labels_file
+        self.train_words_file = train_words_file
+        self.num_threads = num_threads
 
         self._max_sent_len = None
         self._max_doc_len = None
@@ -199,7 +211,7 @@ class HP(object):
             path (pathlib Path or str): new path for the HP's dir,
             pathlib compatible
         """
-        self._path = pathlib.Path(path).resolve()()
+        self._path = pathlib.Path(path).resolve()
         if not self._path.exists():
             self._path.mkdir()
         self.path_initialized = True

@@ -45,7 +45,7 @@ class Model(object):
         """
         raise NotImplementedError("set_logits should be implemented")
 
-    def set_embedding_matrix(self, emb_matrix=None):
+    def set_embedding_matrix(self, emb_matrix=None, vocab_size=None):
         """Should define how the model will lookup the indexes
         it will get as inputs.
 
@@ -80,7 +80,7 @@ class Model(object):
                         name="mean-xent",
                     )
 
-    def build(self, input_tensor, labels_tensor, emb_matrix=None):
+    def build(self, input_tensor, labels_tensor, emb_matrix=None, vocab_size=None):
         """Computes the major operations to create a model:
         * set_embedding_matrix
         * set_logits
@@ -94,7 +94,7 @@ class Model(object):
             with tf.variable_scope("model"):
                 self.input_tensor = input_tensor
                 self.labels_tensor = tf.cast(labels_tensor, tf.float32)
-                self.set_embedding_matrix(emb_matrix)
+                self.set_embedding_matrix(emb_matrix, vocab_size)
                 self.set_logits()
                 self.set_loss()
                 self.one_hot_prediction = tf.one_hot(
