@@ -8,7 +8,6 @@ MultiRNNCell = tf.nn.rnn_cell.MultiRNNCell
 
 
 class HAN(Model):
-
     def get_rnn_cell(self):
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
@@ -134,7 +133,10 @@ class HAN(Model):
                 else tf.argmax(self.logits, axis=1)
             )
 
-    def set_embedding_matrix(self, emb_matrix=None):
+    def set_embedding_matrix(self, emb_matrix=None, vocab_size=None):
+        if vocab_size and not emb_matrix:
+            self.hp.set_vocab_size(vocab_size)
+
         self.np_embedding_matrix = emb_matrix
         if emb_matrix:
             self.embedding_matrix = tf.get_variable(
