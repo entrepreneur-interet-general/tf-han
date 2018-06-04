@@ -347,7 +347,7 @@ class Trainer(object):
                         self.infer_dataset, name="infer_dataset_init_op"
                     )
                 self.input_tensor, self.labels_tensor = tf.cond(
-                    self.is_training,
+                    self.model.is_training,
                     self.train_iter.get_next,
                     lambda: tf.cond(
                         self.shuffle_val_ph,

@@ -23,54 +23,64 @@ class TfTrainer(Trainer):
 
     def make_datasets(self):
         with self.graph.as_default():
-            with tf.variable_scope("datasets"):
-                padded_shapes = (tf.TensorShape([None, None]), tf.TensorShape([None]))
-                padding_values = (np.int64(0), 0)
-
-                with tf.variable_scope("vocab-lookup"):
-                    self.words = tf.contrib.lookup.index_table_from_file(
-                        self.hp.train_words_file, num_oov_buckets=1
+            with tf.device("/cpu:0"):
+                with tf.variable_scope("datasets"):
+                    padded_shapes = (
+                        tf.TensorShape([None, None]),
+                        tf.TensorShape([None]),
                     )
+                    padding_values = (np.int64(0), 0)
 
-                with tf.variable_scope("train"):
-                    train_doc_ds = tf.data.TextLineDataset(self.hp.train_docs_file)
-                    train_labels_ds = tf.data.TextLineDataset(self.hp.train_labels_file)
+                    with tf.variable_scope("vocab-lookup"):
+                        self.words = tf.contrib.lookup.index_table_from_file(
+                            self.hp.train_words_file, num_oov_buckets=1
+                        )
 
-                    dds, lds = self.preprocess_dataset(train_doc_ds, train_labels_ds)
-                    train_ds = tf.data.Dataset.zip((dds, lds))
-                    train_ds = train_ds.shuffle(10000, reshuffle_each_iteration=True)
-                    train_ds = train_ds.repeat()
-                    train_ds = train_ds.padded_batch(
-                        self.batch_size_ph, padded_shapes, padding_values
-                    )
-                    train_ds = train_ds.prefetch(10)
-                    self.train_dataset = train_ds
+                    with tf.variable_scope("train"):
+                        train_doc_ds = tf.data.TextLineDataset(self.hp.train_docs_file)
+                        train_labels_ds = tf.data.TextLineDataset(
+                            self.hp.train_labels_file
+                        )
 
-                with tf.variable_scope("val"):
-                    val_doc_ds = tf.data.TextLineDataset(self.hp.val_docs_file)
-                    val_labels_ds = tf.data.TextLineDataset(self.hp.val_labels_file)
+                        dds, lds = self.preprocess_dataset(
+                            train_doc_ds, train_labels_ds
+                        )
+                        train_ds = tf.data.Dataset.zip((dds, lds))
+                        train_ds = train_ds.shuffle(
+                            10000, reshuffle_each_iteration=True
+                        )
+                        train_ds = train_ds.repeat()
+                        train_ds = train_ds.padded_batch(
+                            self.batch_size_ph, padded_shapes, padding_values
+                        )
+                        train_ds = train_ds.prefetch(10)
+                        self.train_dataset = train_ds
 
-                    dds, lds = self.preprocess_dataset(val_doc_ds, val_labels_ds)
-                    val_ds = tf.data.Dataset.zip((dds, lds))
-                    val_ds = val_ds.shuffle(10000, reshuffle_each_iteration=True)
-                    val_ds = val_ds.repeat()
-                    val_ds = val_ds.padded_batch(
-                        self.batch_size_ph, padded_shapes, padding_values
-                    )
-                    val_ds = val_ds.prefetch(10)
-                    self.val_dataset = val_ds
+                    with tf.variable_scope("val"):
+                        val_doc_ds = tf.data.TextLineDataset(self.hp.val_docs_file)
+                        val_labels_ds = tf.data.TextLineDataset(self.hp.val_labels_file)
 
-                with tf.variable_scope("infer"):
-                    self.features_data_ph = tf.placeholder(
-                        tf.int64, [None, None, None], "features_data_ph"
-                    )
-                    self.labels_data_ph = tf.placeholder(
-                        tf.int32, [None, self.hp.num_classes], "labels_data_ph"
-                    )
-                    infer_dataset = tf.data.Dataset.from_tensor_slices(
-                        (self.features_data_ph, self.labels_data_ph)
-                    )
-                    self.infer_dataset = infer_dataset.batch(self.batch_size_ph)
+                        dds, lds = self.preprocess_dataset(val_doc_ds, val_labels_ds)
+                        val_ds = tf.data.Dataset.zip((dds, lds))
+                        val_ds = val_ds.shuffle(10000, reshuffle_each_iteration=True)
+                        val_ds = val_ds.repeat()
+                        val_ds = val_ds.padded_batch(
+                            self.batch_size_ph, padded_shapes, padding_values
+                        )
+                        val_ds = val_ds.prefetch(10)
+                        self.val_dataset = val_ds
+
+                    with tf.variable_scope("infer"):
+                        self.features_data_ph = tf.placeholder(
+                            tf.int64, [None, None, None], "features_data_ph"
+                        )
+                        self.labels_data_ph = tf.placeholder(
+                            tf.int32, [None, self.hp.num_classes], "labels_data_ph"
+                        )
+                        infer_dataset = tf.data.Dataset.from_tensor_slices(
+                            (self.features_data_ph, self.labels_data_ph)
+                        )
+                        self.infer_dataset = infer_dataset.batch(self.batch_size_ph)
 
     def set_procs(self):
         voc = None
@@ -142,10 +152,7 @@ class TfTrainer(Trainer):
             elif is_val:
                 self.sess.run(
                     self.val_dataset_init_op,
-                    feed_dict={
-                        self.mode_ph: 1,
-                        self.shuffle_val_ph: True,
-                    },
+                    feed_dict={self.mode_ph: 1, self.shuffle_val_ph: True},
                 )
             else:
                 self.train_bs = self.hp.batch_size
