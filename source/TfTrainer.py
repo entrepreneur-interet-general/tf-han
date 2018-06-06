@@ -97,6 +97,9 @@ class TfTrainer(Trainer):
             with open(self.hp.train_words_file, "r") as f:
                 length = sum(1 for line in f) + 1
                 self.hp.set_vocab_size(length)
+            with open(self.hp.val_docs_file, "r") as f:
+                length = sum(1 for line in f)
+                self.val_size = length
 
     def prepare(self):
         """Runs all steps necessary before training can start:
@@ -152,7 +155,11 @@ class TfTrainer(Trainer):
             elif is_val:
                 self.sess.run(
                     self.val_dataset_init_op,
-                    feed_dict={self.mode_ph: 1, self.shuffle_val_ph: True},
+                    feed_dict={
+                        self.mode_ph: 1,
+                        self.shuffle_val_ph: True,
+                        self.batch_size_ph: self.val_size,
+                    },
                 )
             else:
                 self.train_bs = self.hp.batch_size
