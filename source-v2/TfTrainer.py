@@ -49,7 +49,6 @@ class TfTrainer(Trainer):
                         train_ds = train_ds.shuffle(
                             10000, reshuffle_each_iteration=True
                         )
-                        train_ds = train_ds.repeat()
                         train_ds = train_ds.padded_batch(
                             self.batch_size_ph, padded_shapes, padding_values
                         )
@@ -63,7 +62,6 @@ class TfTrainer(Trainer):
                         dds, lds = self.preprocess_dataset(val_doc_ds, val_labels_ds)
                         val_ds = tf.data.Dataset.zip((dds, lds))
                         val_ds = val_ds.shuffle(10000, reshuffle_each_iteration=True)
-                        val_ds = val_ds.repeat()
                         val_ds = val_ds.padded_batch(
                             self.batch_size_ph, padded_shapes, padding_values
                         )
@@ -82,25 +80,6 @@ class TfTrainer(Trainer):
                         )
                         self.infer_dataset = infer_dataset.batch(self.batch_size_ph)
 
-    def set_procs(self):
-        voc = None
-        if self.hp.embedding_file:
-            voc, mat = self.train_proc.build_word_vector_matrix(
-                self.hp.embedding_file, self.hp.max_words
-            )
-            self.train_proc.np_embedding_matrix = mat
-            voc = {k: v + 2 for k, v in voc.items()}
-            voc["<PAD>"] = 0
-            voc["<OOV>"] = 1
-            self.train_proc.vocab = voc
-        else:
-            with open(self.hp.train_words_file, "r") as f:
-                length = sum(1 for line in f) + 1
-                self.hp.set_vocab_size(length)
-            with open(self.hp.val_words_file, "r") as f:
-                length = sum(1 for line in f)
-                self.val_size = length
-
     def prepare(self):
         """Runs all steps necessary before training can start:
             * Processers should have their data ready
@@ -112,12 +91,15 @@ class TfTrainer(Trainer):
             print("Already prepared, skipping.")
             return
 
-        print("Setting Processers...")
-        if self.new_procs:
-            self.set_procs()
+        with open(self.hp.train_words_file, "r") as f:
+            # Need vocabsize to initialize embedding matrix
+            length = sum(1 for line in f) + 1
+            self.hp.vocab_size = length
 
-        self.hp.set_data_values(None, None, self.hp.vocab_size, 300)
-        self.model.hp.set_data_values(None, None, self.hp.vocab_size, 300)
+        with open(self.hp.train_docs_file, "r") as f:
+            # Need vocabsize to initialize embedding matrix
+            length = sum(1 for line in f)
+            self.train_data_length = length
 
         print("Ok. Setting Datasets...")
         self.make_datasets()
@@ -155,7 +137,11 @@ class TfTrainer(Trainer):
             elif is_val:
                 self.sess.run(
                     self.val_dataset_init_op,
-                    feed_dict={self.mode_ph: 1, self.shuffle_val_ph: True, self.batch_size_ph:},
+                    feed_dict={
+                        self.mode_ph: 1,
+                        self.shuffle_val_ph: True,
+                        self.batch_size_ph: self.hp.batch_size,
+                    },
                 )
             else:
                 self.train_bs = self.hp.batch_size
@@ -167,3 +153,17 @@ class TfTrainer(Trainer):
                         self.shuffle_val_ph: True,
                     },
                 )
+
+
+if __name__ == "__main__":
+    from importlib import reload
+    import Hyperparameter as hyp
+    import Trainer as trainer
+    import utils as uts
+
+    reload(hyp)
+    reload(trainer)
+    reload(uts)
+
+    t = TfTrainer('HAN')
+    t.train()
