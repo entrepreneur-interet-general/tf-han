@@ -96,11 +96,6 @@ class TfTrainer(Trainer):
             length = sum(1 for line in f) + 1
             self.hp.vocab_size = length
 
-        with open(self.hp.train_docs_file, "r") as f:
-            # Need vocabsize to initialize embedding matrix
-            length = sum(1 for line in f)
-            self.train_data_length = length
-
         print("Ok. Setting Datasets...")
         self.make_datasets()
         self.make_iterators()
