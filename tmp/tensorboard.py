@@ -15,8 +15,9 @@ with tf.Graph().as_default():
 
     sess = tf.Session()
 
+    labs = [[0, 1, 0], [1, 0, 1]]
     logits = tf.placeholder(tf.int64, [2, 3])
-    labels = tf.Variable([[0, 1, 0], [1, 0, 1]])
+    labels = tf.Variable(labs)
 
     train_writer = tf.summary.FileWriter(train_path, tf.get_default_graph())
     val_writer = tf.summary.FileWriter(val_path)
@@ -40,7 +41,7 @@ with tf.Graph().as_default():
     sess.run(tf.global_variables_initializer())
 
     for i in range(100):
-        s, _ = sess.run([train_sum_op, train_acc_op], {logits: [[0, 1, 0], [1, 0, 1]]})
+        s, _ = sess.run([train_sum_op, train_acc_op], {logits: labs})
         train_writer.add_summary(s, i)
 
         if i > 0 and i % 20 == 0:
