@@ -1,9 +1,10 @@
-import os
-import pathlib
 import datetime
-import pickle as pkl
 import json
-from utils import is_prop
+import os
+import pickle as pkl
+from pathlib import Path
+
+from ..utils import is_prop
 
 
 class HP(object):
@@ -23,7 +24,7 @@ class HP(object):
         except TypeError:
             if isinstance(obj, datetime.datetime):
                 return obj.isoformat()
-            if isinstance(obj, pathlib.Path):
+            if isinstance(obj, Path):
                 return str(obj)
             if "numpy" in str(type(obj)):
                 return obj.tolist()
@@ -40,7 +41,7 @@ class HP(object):
         Returns:
             [type]: [description]
         """
-        path = pathlib.Path(path_to_HP).resolve()
+        path = Path(path_to_HP).resolve()
         to = file_type if file_type in ["pickle", "json"] else "pickle"
         if to == "pickle":
             ext = ".pkl"
@@ -67,6 +68,7 @@ class HP(object):
 
     def __init__(
         self,
+        experiments_dir="./experiments",
         base_dir_name=None,
         batch_size=64,
         cell_size=5,
@@ -80,13 +82,16 @@ class HP(object):
         learning_rate=5e-3,
         max_grad_norm=5.0,
         max_words=1e5,
+        model_type='HAN',
         multilabel=False,
         num_classes=5,
         num_threads=4,
+        pad_word="<PAD>",
         restored=False,
         retrained=False,
         rnn_layers=6,
         save_steps=1000,
+        split_doc_token="|&|",
         summary_secs=1000,
         trainable_embedding_matrix=True,
         val_batch_size=1000,
@@ -97,6 +102,7 @@ class HP(object):
         train_docs_file="/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_train_07/documents.txt",
         train_labels_file="/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_train_07/labels.txt",
         train_words_file="/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_train_07/words.txt",
+        trainer_type="DST"
     ):
 
         now = datetime.datetime.now()
@@ -104,6 +110,7 @@ class HP(object):
         self._path = ""
         self.created_at = int(now.timestamp())
         self.base_dir_name = base_dir_name or str(now)[:10]
+        self.experiments_dir = Path(experiments_dir).resolve()
 
         self.version = version
         self.save_steps = save_steps
@@ -134,6 +141,10 @@ class HP(object):
         self.num_threads = num_threads
         self.embedding_dim = embedding_dim
         self.rnn_layers = rnn_layers
+        self.trainer_type = trainer_type
+        self.model_type = model_type
+        self.pad_word = pad_word
+        self.split_doc_token = split_doc_token
 
         self.vocab_size = None
         self.path_initialized = False
@@ -206,7 +217,7 @@ class HP(object):
             path (pathlib Path or str): new path for the HP's dir,
             pathlib compatible
         """
-        self._path = pathlib.Path(path).resolve()
+        self._path = Path(path).resolve()
         if not self._path.exists():
             self._path.mkdir()
         self.path_initialized = True
@@ -226,10 +237,8 @@ class HP(object):
         Returns:
             pathlib Path: The HP's directory
         """
-        cwd = os.getcwd()
-        cpath = pathlib.Path(cwd).parent
-        ckpt_dir = cpath / "models"
-        path = ckpt_dir / self.version
+        path = self.experiments_dir / self.version
+        path /= self.base_dir_name
         if not path.exists():
             path.mkdir(parents=True)
 

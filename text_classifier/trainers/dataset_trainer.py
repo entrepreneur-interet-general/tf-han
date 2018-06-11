@@ -1,21 +1,25 @@
-import tensorflow as tf
-from Trainer import Trainer
 import numpy as np
+import tensorflow as tf
 
-from utils import extract_sents, extract_words, one_hot_label
+from ..utils import one_hot_label
+from .trainer import Trainer
 
 
-class TfTrainer(Trainer):
+class DST(Trainer):
     def extract_words(self, token):
         # Split characters
         out = tf.string_split(token, delimiter=" ")
         # Convert to Dense tensor, filling with default value
-        out = tf.sparse_tensor_to_dense(out, default_value="<PAD>")
+        out = tf.sparse_tensor_to_dense(out, default_value=self.hp.pad_word)
         return out
 
+    def extract_sents(self, string):
+        # Split the document line into sentences
+        return tf.string_split([string], self.hp.split_doc_token).values
+
     def preprocess_dataset(self, doc_ds, label_ds):
-        doc_ds = doc_ds.map(extract_sents, self.hp.num_threads)
-        doc_ds = doc_ds.map(extract_words, self.hp.num_threads)
+        doc_ds = doc_ds.map(self.extract_sents, self.hp.num_threads)
+        doc_ds = doc_ds.map(self.extract_words, self.hp.num_threads)
         doc_ds = doc_ds.map(self.words.lookup, self.hp.num_threads)
 
         label_ds = label_ds.map(one_hot_label, self.hp.num_threads)
@@ -160,5 +164,5 @@ if __name__ == "__main__":
     reload(trainer)
     reload(uts)
 
-    t = TfTrainer('HAN')
+    t = DST("HAN")
     t.train()

@@ -1,16 +1,16 @@
-from HAN import HAN
-import tensorflow as tf
+import json
+import shutil
+from importlib import reload
 from pathlib import Path
 from time import time
-import shutil
-import numpy as np
-import Hyperparameter as hyp
-import json
-from tensorflow.python.saved_model import tag_constants
-from utils import streaming_f1
-from importlib import reload
 
-reload(hyp)
+import numpy as np
+import tensorflow as tf
+from tensorflow.python.saved_model import tag_constants
+
+from ..hyperparameters import HP
+from ..models import HAN
+from ..utils import streaming_f1
 
 
 def strtime(ref):
@@ -29,7 +29,7 @@ def strtime(ref):
     return "{:2}:{:2}:{:2}".format(h, m, s).replace(" ", "0")
 
 
-class Trainer(object):
+class Trainer:
     def __init__(
         self,
         model_type,
@@ -58,7 +58,7 @@ class Trainer(object):
                 is "reuse" but model is None
         """
         self.model_type = model_type
-        self.hp = trainer_hp or hyp.HP()
+        self.hp = trainer_hp or HP()
         self.graph = graph or tf.Graph()
         self.sess = sess or tf.Session(graph=self.graph)
         self.prepared = False
@@ -597,9 +597,11 @@ class Trainer(object):
                     answer = input("s/d : ")
                     if "s" in answer:
                         self.save()
+                        print('Saved.')
                         break
                     elif "d" in answer:
                         self.delete(False)
+                        print('Deleted.')
                         break
 
 

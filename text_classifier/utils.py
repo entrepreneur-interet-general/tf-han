@@ -1,8 +1,9 @@
-import tensorflow as tf
+from importlib import reload
+from types import ModuleType
 
-from tensorflow.python.ops import variable_scope
-from tensorflow.python.ops import array_ops
+import tensorflow as tf
 from tensorflow.python.framework import ops
+from tensorflow.python.ops import array_ops, variable_scope
 
 try:
     from tensorflow.contrib.rnn import LSTMStateTuple
@@ -11,6 +12,23 @@ except ImportError:
 
 split_doc_token = "|&|"
 padding_token = "<PAD>"
+
+
+def _reload(module, name):
+    reload(module)
+    reload(module)
+    print("Reloading ", module)
+    for attribute_name in dir(module):
+        attribute = getattr(module, attribute_name)
+        if type(attribute) is ModuleType:
+            if name in attribute.__name__:
+                _reload(attribute, name)
+
+
+def rreload(module):
+    """Recursively reload modules."""
+    name = module.__name__
+    _reload(module, name)
 
 
 def bidirectional_rnn(cell_fw, cell_bw, inputs_embedded, input_lengths, scope=None):
@@ -204,7 +222,7 @@ def get_graph_op(graph, and_conds=None, op="and", or_conds=None):
 
     if op == "and":
         return [n for n in node_names if n in ands.intersection(ors)]
-    elif op == "or":
+    else:
         return [n for n in node_names if n in ands.union(ors)]
 
 
@@ -347,159 +365,21 @@ def streaming_f1_from_counts(counts):
     tp_mac, fp_mac, fn_mac, tp_mic, fp_mic, fn_mic, weights = counts
 
     # computing the micro f1 score
-    with tf.variable_scope('micro'):
+    with tf.variable_scope("micro"):
         prec_mic = tp_mic / (tp_mic + fp_mic)
         rec_mic = tp_mic / (tp_mic + fn_mic)
         f1_mic = 2 * prec_mic * rec_mic / (prec_mic + rec_mic)
         f1_mic = tf.reduce_mean(f1_mic)
 
     # computing the macro and wieghted f1 score
-    with tf.variable_scope('macro'):
+    with tf.variable_scope("macro"):
         prec_mac = tp_mac / (tp_mac + fp_mac)
         rec_mac = tp_mac / (tp_mac + fn_mac)
         _f1_mac = 2 * prec_mac * rec_mac / (prec_mac + rec_mac)
         f1_mac = tf.reduce_mean(_f1_mac)
-    with tf.variable_scope('weighted'):
+    with tf.variable_scope("weighted"):
         # normalize weights
         weights /= tf.reduce_sum(weights)
         f1_wei = tf.reduce_sum(f1_mac * weights)
 
     return f1_mic, f1_mac, f1_wei
-
-# FUNCTIONS WITH PRINTS
-#
-# def streaming_counts(_y_true, _y_pred, num_classes):
-#     """Computes the TP, FP and FN counts for the micro and macro f1 scores.
-#     The weighted f1 score can be inferred from the macro f1 score provided
-#     we compute the weights also.
-
-#     This function also defines the update ops to these counts
-    
-#     Args:
-#         y_true (Tensor): 2D Tensor representing the target labels
-#         y_pred (Tensor): 2D Tensor representing the predicted labels
-#         num_classes (int): number of possible classes
-
-#     Returns:
-#         tuple: the first element in the tuple is itself a tuple grouping the counts,
-#         the second element is the grouped update op.
-#     """
-
-#     y_true = tf.cast(_y_true, tf.int64)
-#     y_pred = tf.cast(_y_pred, tf.int64)
-
-#     # Weights for the weighted f1 score
-#     weights = metric_variable(
-#         shape=[num_classes], dtype=tf.int64, validate_shape=False, name="weights"
-#     )
-#     # Counts for the macro f1 score
-#     tp_mac = metric_variable(
-#         shape=[num_classes], dtype=tf.int64, validate_shape=False, name="tp_mac"
-#     )
-#     fp_mac = metric_variable(
-#         shape=[num_classes], dtype=tf.int64, validate_shape=False, name="fp_mac"
-#     )
-#     fn_mac = metric_variable(
-#         shape=[num_classes], dtype=tf.int64, validate_shape=False, name="fn_mac"
-#     )
-#     # Counts for the micro f1 score
-#     tp_mic = metric_variable(
-#         shape=[], dtype=tf.int64, validate_shape=False, name="tp_mic"
-#     )
-#     fp_mic = metric_variable(
-#         shape=[], dtype=tf.int64, validate_shape=False, name="fp_mic"
-#     )
-#     fn_mic = metric_variable(
-#         shape=[], dtype=tf.int64, validate_shape=False, name="fn_mic"
-#     )
-
-#     # Update ops, as in the previous section:
-#     #   - Update ops for the macro f1 score
-#     up_tp_mac = tf.assign_add(tp_mac, tf.count_nonzero(y_pred * y_true, axis=0))
-#     up_fp_mac = tf.assign_add(fp_mac, tf.count_nonzero(y_pred * (y_true - 1), axis=0))
-#     up_fn_mac = tf.assign_add(fn_mac, tf.count_nonzero((y_pred - 1) * y_true, axis=0))
-
-#     #   - Update ops for the micro f1 score
-#     up_tp_mic = tf.assign_add(tp_mic, tf.count_nonzero(y_pred * y_true, axis=None))
-#     up_fp_mic = tf.assign_add(
-#         fp_mic, tf.count_nonzero(y_pred * (y_true - 1), axis=None)
-#     )
-#     up_fn_mic = tf.assign_add(
-#         fn_mic, tf.count_nonzero((y_pred - 1) * y_true, axis=None)
-#     )
-#     # Update op for the weights, just summing
-#     up_weights = tf.assign_add(weights, tf.reduce_sum(y_true, axis=0))
-
-#     tp_mac = tf.Print(tp_mac, [tp_mac], message="tp_mac", summarize=10)
-#     fp_mac = tf.Print(fp_mac, [fp_mac], message="fp_mac", summarize=10)
-#     fn_mac = tf.Print(fn_mac, [fn_mac], message="fn_mac", summarize=10)
-#     tp_mic = tf.Print(tp_mic, [tp_mic], message="tp_mic", summarize=10)
-#     fp_mic = tf.Print(fp_mic, [fp_mic], message="fp_mic", summarize=10)
-#     fn_mic = tf.Print(fn_mic, [fn_mic], message="fn_mic", summarize=10)
-#     weights = tf.Print(weights, [weights], message="weights", summarize=10)
-
-#     # Grouping values
-#     counts = (tp_mac, fp_mac, fn_mac, tp_mic, fp_mic, fn_mic, weights)
-#     updates = tf.group(
-#         up_tp_mic, up_fp_mic, up_fn_mic, up_tp_mac, up_fp_mac, up_fn_mac, up_weights
-#     )
-
-#     return counts, updates
-
-
-# def streaming_f1(y_true, y_pred, num_classes):
-#     """Compute and update the F1 scores given target labels
-#     and predicted labels
-    
-#     Args:
-#         y_true (Tensor): 2D one-hot Tensor of the target labels.
-#             Possibly several ones for multiple labels
-#         y_pred (Tensor): 2D one-hot Tensor of the predicted labels.
-#             Possibly several ones for multiple labels
-#         num_classes (int): Number of possible classes labels can take
-    
-#     Returns:
-#         tuple: f1s as tuple of three tensors: micro macro and weighted F1,
-#             second element is the group of updates to counts making the F1s
-#     """
-#     counts, updates = streaming_counts(y_true, y_pred, num_classes)
-#     f1s = streaming_f1_from_counts(counts)
-#     return f1s, updates
-
-
-# def streaming_f1_from_counts(counts):
-#     """Computes the f1 scores from the TP, FP and FN counts
-    
-#     Args:
-#         counts (tuple): macro and micro counts, and weights in the end
-    
-#     Returns:
-#         tuple(Tensor): The 3 tensors representing the micro, macro and weighted
-#             f1 score
-#     """
-#     # unpacking values
-#     tp_mac, fp_mac, fn_mac, tp_mic, fp_mic, fn_mic, weights = counts
-
-#     # normalize weights
-#     weights /= tf.reduce_sum(weights)
-
-#     # computing the micro f1 score
-#     prec_mic = tp_mic / (tp_mic + fp_mic)
-#     rec_mic = tp_mic / (tp_mic + fn_mic)
-#     f1_mic = 2 * prec_mic * rec_mic / (prec_mic + rec_mic)
-#     f1_mic = tf.reduce_mean(f1_mic)
-
-#     # computing the macro and wieghted f1 score
-#     sum_mac = tp_mac + fp_mac
-#     sum_mac = tf.Print(sum_mac, [sum_mac], message="sum_mac", summarize=10)
-#     prec_mac = tp_mac / sum_mac
-#     rec_mac = tp_mac / (tp_mac + fn_mac)
-#     f1_mac = 2 * prec_mac * rec_mac / (prec_mac + rec_mac)
-#     f1_wei = tf.reduce_sum(f1_mac * weights)
-#     f1_mac = tf.reduce_mean(f1_mac)
-
-#     f1_mic = tf.Print(f1_mic, [f1_mic], message="f1_mic", summarize=10)
-#     f1_mac = tf.Print(f1_mac, [f1_mac], message="f1_mac", summarize=10)
-#     f1_wei = tf.Print(f1_wei, [f1_wei], message="f1_wei", summarize=10)
-
-#     return f1_mic, f1_mac, f1_wei

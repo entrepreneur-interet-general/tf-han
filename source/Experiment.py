@@ -1,2 +1,0 @@
-class Experiment(object):
-    pass
