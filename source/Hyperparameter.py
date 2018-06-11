@@ -7,7 +7,6 @@ from utils import is_prop
 
 
 class HP(object):
-
     @staticmethod
     def from_dict(dic):
         h = HP()
@@ -70,14 +69,15 @@ class HP(object):
         self,
         base_dir_name=None,
         batch_size=64,
-        cell_size=10,
+        cell_size=5,
         decay_steps=10,
         decay_rate=0.99,
         dropout=0.6,
         embedding_file="",
+        embedding_dim=100,
         epochs=20,
         global_step=0,
-        learning_rate=1e-3,
+        learning_rate=5e-3,
         max_grad_norm=5.0,
         max_words=1e5,
         multilabel=False,
@@ -85,14 +85,13 @@ class HP(object):
         num_threads=4,
         restored=False,
         retrained=False,
+        rnn_layers=6,
         save_steps=1000,
         summary_secs=1000,
         trainable_embedding_matrix=True,
         val_batch_size=1000,
-        val_every=5000,
-        version="v1",
-        val_data_path="/Users/victor/Documents/Tracfin/dev/han/data/yelp/sampled/sample_0001_val_01.json",
-        train_data_path="/Users/victor/Documents/Tracfin/dev/han/data/yelp/sampled/sample_0001_train_07.json",
+        val_every=10,
+        version="v2",
         val_docs_file="/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_val_01/documents.txt",
         val_labels_file="/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_val_01/labels.txt",
         train_docs_file="/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_train_07/documents.txt",
@@ -112,8 +111,6 @@ class HP(object):
         self.batch_size = batch_size
         self.num_classes = num_classes
         self.epochs = epochs
-        self.val_data_path = val_data_path
-        self.train_data_path = train_data_path
         self.val_every = val_every
         self.trainable_embedding_matrix = trainable_embedding_matrix
         self.cell_size = cell_size
@@ -135,12 +132,10 @@ class HP(object):
         self.train_labels_file = train_labels_file
         self.train_words_file = train_words_file
         self.num_threads = num_threads
+        self.embedding_dim = embedding_dim
+        self.rnn_layers = rnn_layers
 
-        self._max_sent_len = None
-        self._max_doc_len = None
-        self._vocab_size = None
-        self._embedding_dim = None
-
+        self.vocab_size = None
         self.path_initialized = False
         self.id = None
 
@@ -272,44 +267,5 @@ class HP(object):
 
         return self._path
 
-    @property
-    def max_sent_len(self):
-        if self._max_sent_len:
-            return self._max_sent_len
-        raise ValueError("Set max_sent_len first")
-
-    def set_max_sent_len(self, length):
-        self._max_sent_len = length
-
-    @property
-    def max_doc_len(self):
-        if self._max_doc_len:
-            return self._max_doc_len
-        raise ValueError("Set max_doc_len first")
-
-    def set_max_doc_len(self, length):
-        self._max_doc_len = length
-
-    @property
-    def vocab_size(self):
-        if self._vocab_size:
-            return self._vocab_size
-        raise ValueError("Set vocab_size first")
-
-    def set_vocab_size(self, length):
-        self._vocab_size = length
-
-    @property
-    def embedding_dim(self):
-        if self._embedding_dim:
-            return self._embedding_dim
-        raise ValueError("Set embedding_dim first")
-
-    def set_embedding_dim(self, length):
-        self._embedding_dim = length
-
-    def set_data_values(self, doc_len, sent_len, vocab_size, emb_dim):
-        self.set_embedding_dim(emb_dim)
-        self.set_max_doc_len(doc_len)
-        self.set_max_sent_len(sent_len)
-        self.set_vocab_size(vocab_size)
+    def set_vocab_size(self, size):
+        self.vocab_size = size

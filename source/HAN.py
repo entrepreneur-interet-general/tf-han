@@ -25,10 +25,18 @@ class HAN(Model):
         self.batch = None
         self.docs = None
         self.sents = None
-        self.sent_cell_fw = MultiRNNCell([self.get_rnn_cell() for _ in range(1)])
-        self.sent_cell_bw = MultiRNNCell([self.get_rnn_cell() for _ in range(1)])
-        self.doc_cell_fw = MultiRNNCell([self.get_rnn_cell() for _ in range(1)])
-        self.doc_cell_bw = MultiRNNCell([self.get_rnn_cell() for _ in range(1)])
+        self.sent_cell_fw = MultiRNNCell(
+            [self.get_rnn_cell() for _ in range(self.hp.rnn_layers)]
+        )
+        self.sent_cell_bw = MultiRNNCell(
+            [self.get_rnn_cell() for _ in range(self.hp.rnn_layers)]
+        )
+        self.doc_cell_fw = MultiRNNCell(
+            [self.get_rnn_cell() for _ in range(self.hp.rnn_layers)]
+        )
+        self.doc_cell_bw = MultiRNNCell(
+            [self.get_rnn_cell() for _ in range(self.hp.rnn_layers)]
+        )
         self.val_ph = None
         self.embedded_inputs = None
         self.embedded_sentences = None
@@ -149,6 +157,6 @@ class HAN(Model):
             self.embedding_matrix = tf.get_variable(
                 "random_embedding",
                 shape=(self.hp.vocab_size, self.hp.embedding_dim),
-                initializer=tf.random_normal_initializer,
+                initializer=tf.contrib.layers.xavier_initializer(),
                 trainable=True,
             )

@@ -1,6 +1,4 @@
 from HAN import HAN
-from LogReg import LogReg
-from Processer import Processer
 import tensorflow as tf
 from pathlib import Path
 from time import time
@@ -9,7 +7,7 @@ import numpy as np
 import Hyperparameter as hyp
 import json
 from tensorflow.python.saved_model import tag_constants
-from utils import f1_score
+from utils import streaming_f1
 from importlib import reload
 
 reload(hyp)
@@ -32,24 +30,6 @@ def strtime(ref):
 
 
 class Trainer(object):
-    @staticmethod
-    def initialize_from_trainer(trainer):
-        """Creates a new Trainer instance from an
-        existing trainer's hp and processers
-
-        Args:
-            trainer (Trainer): trainer to initialize from
-
-        Returns:
-            Trainer: New trainer with identical parameters and
-            processers
-        """
-        hp = trainer.hp
-        hp.assign_new_dir()
-        return Trainer(
-            hp, trainer.model_type, processers=[trainer.train_proc, trainer.val_proc]
-        )
-
     def __init__(
         self,
         model_type,
@@ -57,7 +37,6 @@ class Trainer(object):
         model=None,
         graph=None,
         sess=None,
-        processers=None,
         restored=False,
     ):
         """Creates a Trainer.
@@ -123,33 +102,22 @@ class Trainer(object):
         self.infer_dataset_init_op = None
         self.train_dataset_init_op = None
         self.val_size = None
+        self.metrics_updates = None
+        self.train_data_length = None
+        self.training_summary_op = None
+        self.val_metrics_summary_op = None
+        self.train_metrics_summary_op = None
 
-        if model_type == "LogReg":
-            self.model = LogReg(self.hp, self.graph)
-        elif model_type == "HAN":
+        self.metrics = {}
+        self.summary_ops = {}
+
+        if model_type == "HAN":
             self.model = HAN(self.hp, self.graph)
         elif model_type == "reuse" and model:
             self.model = model
         else:
             raise ValueError("Invalid model")
 
-        if processers:
-            assert isinstance(processers, list)
-            assert len(processers) == 2
-
-            if isinstance(processers[0], (str, Path)):
-                processers = [Path(p).resolve() for p in processers]
-                self.train_proc = Processer.load(processers[0])
-                self.val_proc = Processer.load(processers[1])
-            else:
-                print("Reused procs")
-                self.train_proc, self.val_proc = processers
-
-            self.new_procs = False
-
-        else:
-            self.train_proc = Processer()
-            self.val_proc = Processer()
         if not restored:
             self.set_placeholders()
 
@@ -269,57 +237,31 @@ class Trainer(object):
         if not ask or "y" in input("Are you sure? (y/n)"):
             shutil.rmtree(self.hp.dir)
 
-    def translate(self, batch):
-        docs = []
-        for d in batch:
-            sentences = []
-            for s in d:
-                if s.sum() > 0:
-                    sentences.append(
-                        [self.train_proc.reversed_vocab[w] for w in s if w > 0]
-                    )
-            docs.append(sentences)
-        return docs
+    # def translate(self, batch):
+    #     docs = []
+    #     for d in batch:
+    #         sentences = []
+    #         for s in d:
+    #             if s.sum() > 0:
+    #                 sentences.append(
+    #                     [self.train_proc.reversed_vocab[w] for w in s if w > 0]
+    #                 )
+    #         docs.append(sentences)
+    #     return docs
 
-    def display(self, batch, labels=None):
-        if labels is None:
-            labels = [None] * len(batch)
-        elif len(labels.shape) > 1:
-            labels = np.where(labels > 0)[1]
-        docs = self.translate(batch)
-        return "###\n\n".join(
-            [
-                "Rating: {}".format(labels[i])
-                + "\n".join([" ".join([w for w in s]) for s in d])
-                for i, d in enumerate(docs)
-            ]
-        )
-
-    def set_procs(self):
-        voc = None
-        if self.hp.embedding_file:
-            voc, mat = self.train_proc.build_word_vector_matrix(
-                self.hp.embedding_file, self.hp.max_words
-            )
-            self.train_proc.np_embedding_matrix = mat
-            voc = {k: v + 2 for k, v in voc.items()}
-            voc["<PAD>"] = 0
-            voc["<OOV>"] = 1
-            self.train_proc.vocab = voc
-
-        self.train_proc.process(data_path=self.hp.train_data_path, vocabulary=voc)
-        self.val_proc.process(
-            data_path=self.hp.val_data_path,
-            vocabulary=self.train_proc.vocab,
-            max_sent_len=self.train_proc.max_sent_len,
-            max_doc_len=self.train_proc.max_doc_len,
-        )
-
-    def save_procs(self, path=None):
-        path = path or self.hp.dir
-        path = Path(path).resolve()
-        self.train_proc.save(path / "train_proc.pkl")
-        self.val_proc.save(path / "val_proc.pkl")
+    # def display(self, batch, labels=None):
+    #     if labels is None:
+    #         labels = [None] * len(batch)
+    #     elif len(labels.shape) > 1:
+    #         labels = np.where(labels > 0)[1]
+    #     docs = self.translate(batch)
+    #     return "###\n\n".join(
+    #         [
+    #             "Rating: {}".format(labels[i])
+    #             + "\n".join([" ".join([w for w in s]) for s in d])
+    #             for i, d in enumerate(docs)
+    #         ]
+    #     )
 
     def make_iterators(self):
         with self.graph.as_default():
@@ -358,39 +300,7 @@ class Trainer(object):
                 )
 
     def make_datasets(self):
-        """Creates 2 datasets, one to train the other to validate the model.
-        Conditioned on the value of mode_ph, the input and label tensors come
-        from either the training set (0), validation set (1) or custom
-        inference values (2).
-        """
-
-        with self.graph.as_default():
-            self.features_data_ph = tf.placeholder(
-                tf.int32, [None, None, self.train_proc.max_sent_len], "features_data_ph"
-            )
-            self.labels_data_ph = tf.placeholder(
-                tf.int32, [None, self.hp.num_classes], "labels_data_ph"
-            )
-            with tf.variable_scope("datasets"):
-                with tf.variable_scope("train"):
-                    self.train_dataset = tf.data.Dataset.from_tensor_slices(
-                        (self.features_data_ph, self.labels_data_ph)
-                    )
-                    self.train_dataset = self.train_dataset.shuffle(buffer_size=100000)
-                    self.train_dataset = self.train_dataset.batch(self.batch_size_ph)
-
-                with tf.variable_scope("val"):
-                    self.val_dataset = tf.data.Dataset.from_tensor_slices(
-                        (self.features_data_ph, self.labels_data_ph)
-                    )
-                    self.val_dataset = self.val_dataset.shuffle(buffer_size=100000)
-                    self.val_dataset = self.val_dataset.batch(self.batch_size_ph)
-
-                with tf.variable_scope("infer"):
-                    self.infer_dataset = tf.data.Dataset.from_tensor_slices(
-                        (self.features_data_ph, self.labels_data_ph)
-                    )
-                    self.infer_dataset = self.infer_dataset.batch(self.batch_size_ph)
+        raise NotImplementedError("Implement make_datasets")
 
     def get_input_pair(self, is_val=False, shuffle_val=True):
         self.initialize_iterators(is_val)
@@ -399,13 +309,79 @@ class Trainer(object):
             feed_dict={self.mode_ph: int(is_val), self.shuffle_val_ph: True},
         )
 
+    def set_metrics(self):
+        with tf.variable_scope("metrics"):
+            for scope in ["train", "val"]:
+                with tf.variable_scope(scope):
+                    with tf.variable_scope("f1"):
+                        f1s, f1_updates = streaming_f1(
+                            self.labels_tensor,
+                            self.model.one_hot_prediction,
+                            self.hp.num_classes,
+                        )
+                        micro_f1, macro_f1, weighted_f1 = f1s
+                    with tf.variable_scope("accuracy"):
+                        accuracy, accuracy_update = tf.metrics.accuracy(
+                            tf.cast(self.model.one_hot_prediction, tf.int32),
+                            self.labels_tensor,
+                        )
+                    self.metrics[scope] = {
+                        "accuracy": accuracy,
+                        "f1": {
+                            "micro": micro_f1,
+                            "macro": macro_f1,
+                            "weighted": weighted_f1,
+                        },
+                        "updates": tf.group(f1_updates, accuracy_update),
+                    }
+
+    def set_summaries(self):
+        with tf.variable_scope("summaries"):
+            for scope in self.metrics:
+                for metric in self.metrics[scope]:
+                    if metric == "accuracy":
+                        tf.summary.scalar(
+                            "{}".format(metric),
+                            self.metrics[scope][metric],
+                            collections=[scope + "_metrics"],
+                        )
+                    elif metric == "f1":
+                        for f1 in self.metrics[scope][metric]:
+                            tf.summary.scalar(
+                                "{}_{}".format(metric, f1),
+                                self.metrics[scope][metric][f1],
+                                collections=[scope + "_metrics"],
+                            )
+
+            tf.summary.scalar("loss", self.model.loss, collections=["training"])
+            tf.summary.scalar(
+                "learning_rate", self.learning_rate, collections=["training"]
+            )
+            self.summary_ops["training"] = tf.summary.merge_all(key="training")
+            self.summary_ops["val_metrics"] = tf.summary.merge_all(key="val_metrics")
+            self.summary_ops["train_metrics"] = tf.summary.merge_all(
+                key="train_metrics"
+            )
+
+        self.train_writer = tf.summary.FileWriter(
+            str(self.hp.dir / "tensorboard" / "train"), self.graph
+        )
+        self.val_writer = tf.summary.FileWriter(
+            str(self.hp.dir / "tensorboard" / "val")
+        )
+
+    def reset_metrics(self, mode):
+        reset_vars = [
+            v for v in tf.local_variables() if "metrics" in v.name and mode in v.name
+        ]
+        self.sess.run(tf.variables_initializer(reset_vars))
+
     def build(self):
         """Performs the graph manipulations to create the trainer:
             * builds the model
             * creates the optimizer
             * computes metrics tensors
             * creates summaries for Tensorboard
-
 
         Raises:
             ValueError: cannot be run before the datasets are created
@@ -415,10 +391,7 @@ class Trainer(object):
                 raise ValueError("Run make_datasets() first!")
 
             self.model.build(
-                self.input_tensor,
-                self.labels_tensor,
-                self.train_proc.np_embedding_matrix,
-                self.hp.vocab_size,
+                self.input_tensor, self.labels_tensor, None, self.hp.vocab_size
             )
 
             with tf.variable_scope("optimization"):
@@ -438,35 +411,10 @@ class Trainer(object):
                     grads_and_vars, global_step=self.global_step_var
                 )
 
-            with tf.variable_scope("metrics"):
-                micro_f1, macro_f1, weighted_f1 = f1_score(
-                    self.labels_tensor, self.model.one_hot_prediction
-                )
-                accuracy = tf.contrib.metrics.accuracy(
-                    tf.cast(self.model.one_hot_prediction, tf.int32), self.labels_tensor
-                )
+            self.set_metrics()
+            self.set_summaries()
 
-                self.accuracy = accuracy
-                self.micro_f1 = micro_f1
-                self.macro_f1 = macro_f1
-                self.weighted_f1 = weighted_f1
-            with tf.variable_scope("summaries"):
-                tf.summary.scalar("LLoss", self.model.loss)
-                tf.summary.scalar("macro_f1", macro_f1)
-                tf.summary.scalar("micro_f1", micro_f1)
-                tf.summary.scalar("weighted_f1", weighted_f1)
-                tf.summary.scalar("accuracy", accuracy)
-                tf.summary.scalar("learning_rate", self.learning_rate)
-                self.summary_op = tf.summary.merge_all()
-
-            self.train_writer = tf.summary.FileWriter(
-                str(self.hp.dir / "tensorboard" / "train"), self.graph
-            )
-            self.val_writer = tf.summary.FileWriter(
-                str(self.hp.dir / "tensorboard" / "val")
-            )
-
-    def eval(self, tensor_name):
+    def eval_tensor(self, tensor_name):
         return self.sess.run(self.graph.get_tensor_by_name(tensor_name))
 
     def initialize_iterators(self, is_val=False, inference_data=None):
@@ -476,50 +424,7 @@ class Trainer(object):
             is_val (bool, optional): Defaults to False. Whether to initialize
                 the validation (True) or training (False) iterator
         """
-        with self.graph.as_default():
-            if inference_data is not None:
-                feats = inference_data
-                labs = np.zeros((len(feats), self.hp.num_classes))
-                bs = len(feats)
-                self.sess.run(
-                    self.infer_dataset_init_op,
-                    feed_dict={
-                        self.mode_ph: 1,
-                        self.features_data_ph: feats,
-                        self.labels_data_ph: labs,
-                        self.batch_size_ph: bs,
-                        self.shuffle_val_ph: False,
-                    },
-                )
-                print("Iterator ready to infer")
-            elif is_val:
-                self.val_feats = self.val_proc.features
-                self.val_labs = self.val_proc.labels
-                self.val_bs = len(self.val_feats)
-                self.sess.run(
-                    self.val_dataset_init_op,
-                    feed_dict={
-                        self.mode_ph: 1,
-                        self.features_data_ph: self.val_feats,
-                        self.labels_data_ph: self.val_labs,
-                        self.batch_size_ph: self.val_bs,
-                        self.shuffle_val_ph: True,
-                    },
-                )
-            else:
-                self.train_feats = self.train_proc.features
-                self.train_labs = self.train_proc.labels
-                self.train_bs = self.hp.batch_size
-                self.sess.run(
-                    self.train_dataset_init_op,
-                    feed_dict={
-                        self.mode_ph: 0,
-                        self.features_data_ph: self.train_feats,
-                        self.labels_data_ph: self.train_labs,
-                        self.batch_size_ph: self.train_bs,
-                        self.shuffle_val_ph: True,
-                    },
-                )
+        raise NotImplementedError("Implement initialize_iterators")
 
     def prepare(self):
         """Runs all steps necessary before training can start:
@@ -528,47 +433,10 @@ class Trainer(object):
             * Datasets are initialized
             * Trainer is built
         """
-        if self.prepared:
-            print("Already prepared, skipping.")
-            return
-
-        print("Setting Processers...")
-        if self.new_procs:
-            self.set_procs()
-
-        self.hp.set_data_values(
-            self.train_proc.max_doc_len,
-            self.train_proc.max_sent_len,
-            self.train_proc.vocab_size,
-            300,
-        )
-        self.model.hp.set_data_values(
-            self.train_proc.max_doc_len,
-            self.train_proc.max_sent_len,
-            self.train_proc.vocab_size,
-            300,
-        )
-
-        print("Ok. Setting Datasets...")
-        self.make_datasets()
-        self.make_iterators()
-        print("Ok. Building graph...")
-        self.build()
-        print("Ok. Saving hp...")
-        self.hp.dump(to="json")
-        print("OK.")
-        self.prepared = True
+        raise NotImplementedError("Implement prepare")
 
     def infer(self, features, with_logits=True):
         self.initialize_iterators(inference_data=features)
-        # self.sess.run(tf.assign(self.input_tensor, features))
-        # if self.hp.restored:
-        #     fd = {
-        #         self.graph.get_tensor_by_name('mode_ph:0'): 1
-        #     }
-        #     prediction = self.graph.get_tensor_by_name('prediction:0')
-        #     logits = self.graph.get_tensor_by_name('logits:0')
-        # else:
         fd = {self.mode_ph: 1, self.shuffle_val_ph: False}
         prediction = self.model.prediction
         logits = self.model.logits
@@ -588,33 +456,43 @@ class Trainer(object):
             str: Information to print
         """
         # Validate every n examples so every n/batch_size batchs
-        val_every = self.hp.val_every // self.hp.batch_size
 
         if self.hp.global_step == 0:
             # don't validate on first step eventhough
             # self.hp.global_step% val_every == 0
             return None
 
-        if (not force) and self.hp.global_step % val_every != 0:
+        if (not force) and self.hp.global_step % self.hp.val_every != 0:
             # validate if force eventhough
             # self.hp.global_step% val_every != 0
             return None
 
         self.initialize_iterators(is_val=True)
+        self.reset_metrics("val")
+        self.one_hot_predictions = []
+        while True:
+            try:
+                _, s, acc, mic, mac, wei, pred = self.sess.run(
+                    [
+                        self.metrics["val"]["updates"],
+                        self.summary_ops["val_metrics"],
+                        self.metrics["val"]["accuracy"],
+                        self.metrics["val"]["f1"]["micro"],
+                        self.metrics["val"]["f1"]["macro"],
+                        self.metrics["val"]["f1"]["weighted"],
+                        self.model.one_hot_prediction,
+                    ],
+                    feed_dict={self.mode_ph: 1, self.shuffle_val_ph: True},
+                )
+                self.one_hot_predictions.append(pred)
+            except tf.errors.OutOfRangeError:
+                break
 
-        s, acc, mic, mac, wei = self.sess.run(
-            [
-                self.summary_op,
-                self.accuracy,
-                self.micro_f1,
-                self.macro_f1,
-                self.weighted_f1,
-            ],
-            feed_dict={self.mode_ph: 1, self.shuffle_val_ph: True},
-        )
         self.val_writer.add_summary(s, self.hp.global_step)
         self.val_writer.flush()
         self.train_writer.flush()
+        for _ in self.one_hot_predictions:
+            print(_.sum(axis=0))
         return acc, mic, mac, wei
 
     def epoch_string(self, epoch, loss, lr, metrics):
@@ -628,17 +506,15 @@ class Trainer(object):
         epoch_string = "[{}] EPOCH {:2} / {:2} | "
         epoch_string += "Step {:5} | Loss: {:.4f} | "
         epoch_string += "lr: {:.5f} | "
-        epoch_string = (
-            epoch_string.format(
-                strtime(self.train_start_time),
-                epoch + 1,
-                self.hp.epochs,
-                self.hp.global_step,
-                loss,
-                lr,
-            )
-            + val_string
+        epoch_string = epoch_string.format(
+            strtime(self.train_start_time),
+            epoch + 1,
+            self.hp.epochs,
+            self.hp.global_step,
+            loss,
+            lr,
         )
+        epoch_string += val_string
         return epoch_string
 
     def train(self, continue_training=False):
@@ -661,6 +537,7 @@ class Trainer(object):
             if not continue_training:
                 tf.global_variables_initializer().run(session=self.sess)
                 tf.tables_initializer().run(session=self.sess)
+                self.reset_metrics("train")
             else:
                 self.initialize_uninitialized()
             try:
@@ -669,22 +546,36 @@ class Trainer(object):
                     stop = False
                     while not stop:
                         try:
-                            _, summary, loss, lr, gs = self.sess.run(
+                            loss, lr, summary, _, _ = self.sess.run(
                                 [
-                                    self.train_op,
-                                    self.summary_op,
                                     self.model.loss,
                                     self.learning_rate,
-                                    self.global_step_var,
+                                    self.summary_ops["training"],
+                                    self.train_op,
+                                    self.metrics["train"]["updates"],
                                 ],
                                 feed_dict={self.mode_ph: 0, self.shuffle_val_ph: True},
                             )
-                            self.hp.global_step = gs
+                            self.hp.global_step = tf.train.global_step(
+                                self.sess, self.global_step_var
+                            )
                             self.train_writer.add_summary(summary, self.hp.global_step)
 
+                            if self.hp.global_step % 20 == 0:
+                                self.train_writer.add_summary(
+                                    self.sess.run(
+                                        self.summary_ops["train_metrics"],
+                                        feed_dict={
+                                            self.mode_ph: 0,
+                                            self.shuffle_val_ph: True,
+                                        },
+                                    ),
+                                    self.hp.global_step,
+                                )
+                                self.train_writer.flush()
+                                self.reset_metrics("train")
+
                             metrics = self.validate()
-                            if gs % 100 == 0:
-                                self.inferences.append(self.ref_feats)
 
                         except tf.errors.OutOfRangeError:
                             stop = True
@@ -701,9 +592,15 @@ class Trainer(object):
                         )
                     )
             except KeyboardInterrupt:
-                print("\nInterrupting. Save?")
-                if "y" in input("y/n : "):
-                    self.save()
+                while True:
+                    print("\nInterrupting. Save or delete?")
+                    answer = input("s/d : ")
+                    if "s" in answer:
+                        self.save()
+                        break
+                    elif "d" in answer:
+                        self.delete(False)
+                        break
 
 
 if __name__ == "__main__":
