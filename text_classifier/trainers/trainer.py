@@ -10,7 +10,7 @@ from tensorflow.python.saved_model import tag_constants
 
 from ..hyperparameters import HP
 from ..models import HAN
-from ..utils import streaming_f1
+from ..utils import streaming_f1, EndOfExperiment
 
 
 def strtime(ref):
@@ -32,8 +32,8 @@ def strtime(ref):
 class Trainer:
     def __init__(
         self,
-        model_type,
-        trainer_hp=None,
+        model_type=None,
+        hp=None,
         model=None,
         graph=None,
         sess=None,
@@ -43,7 +43,7 @@ class Trainer:
 
         Args:
             model_type (str): can be a known model or "reuse"
-            trainer_hp (Hyperparameter): the trainer's params
+            hp (Hyperparameter): the trainer's params
             model (Model, optional): Defaults to None.
                 Model to use if model_type is reuse
             graph (tf.Graph, optional): Defaults to None.
@@ -57,8 +57,8 @@ class Trainer:
             ValueError: if the model is unknown or if model_type
                 is "reuse" but model is None
         """
-        self.model_type = model_type
-        self.hp = trainer_hp or HP()
+        self.hp = hp or HP()
+        self.model_type = model_type or self.hp.model_type
         self.graph = graph or tf.Graph()
         self.sess = sess or tf.Session(graph=self.graph)
         self.prepared = False
@@ -111,9 +111,9 @@ class Trainer:
         self.metrics = {}
         self.summary_ops = {}
 
-        if model_type == "HAN":
+        if self.model_type == "HAN":
             self.model = HAN(self.hp, self.graph)
-        elif model_type == "reuse" and model:
+        elif self.model_type == "reuse" and model:
             self.model = model
         else:
             raise ValueError("Invalid model")
@@ -447,7 +447,7 @@ class Trainer:
 
     def validate(self, force=False):
         """Runs a validation step according to the current
-        global_step, i.e. if step % hp.val_every == 0
+        global_step, i.e. if step % hp.val_every_steps == 0
 
         force (bool, optional): Defaults to False. Whether
             or not to force validation regarless of global_step
@@ -459,12 +459,12 @@ class Trainer:
 
         if self.hp.global_step == 0:
             # don't validate on first step eventhough
-            # self.hp.global_step% val_every == 0
+            # self.hp.global_step% val_every_steps == 0
             return None
 
-        if (not force) and self.hp.global_step % self.hp.val_every != 0:
+        if (not force) and self.hp.global_step % self.hp.val_every_steps != 0:
             # validate if force eventhough
-            # self.hp.global_step% val_every != 0
+            # self.hp.global_step% val_every_steps != 0
             return None
 
         self.initialize_iterators(is_val=True)
@@ -577,13 +577,16 @@ class Trainer:
 
                             metrics = self.validate()
 
+                            if self.hp.global_step > self.hp.val_every_steps + 5:
+                                raise tf.errors.OutOfRangeError(None, None, 'over')
+
                         except tf.errors.OutOfRangeError:
                             stop = True
                         finally:
                             print(self.epoch_string(epoch, loss, lr, metrics), end="\r")
 
                 # End of epochs
-                if self.hp.global_step % self.hp.val_every != 0:
+                if self.hp.global_step % self.hp.val_every_steps != 0:
                     # print final validation if not done at the end
                     # of last epoch
                     print(
@@ -593,16 +596,23 @@ class Trainer:
                     )
             except KeyboardInterrupt:
                 while True:
-                    print("\nInterrupting. Save or delete?")
-                    answer = input("s/d : ")
-                    if "s" in answer:
-                        self.save()
-                        print('Saved.')
+                    try:
+                        print("\nInterrupting. Save or delete?")
+                        answer = input("s/d : ")
+                        if "s" in answer:
+                            self.save()
+                            print("Saved.")
+                            break
+                        elif "d" in answer:
+                            self.delete(False)
+                            print("Deleted.")
+                        print("\Continue Experiment?")
+                        answer = input("y/n : ")
+                        if "y" not in answer:
+                            raise EndOfExperiment("Stopping Experiment")
                         break
-                    elif "d" in answer:
-                        self.delete(False)
-                        print('Deleted.')
-                        break
+                    except KeyboardInterrupt:
+                        raise EndOfExperiment("Stopping Experiment")
 
 
 if __name__ == "__main__":
