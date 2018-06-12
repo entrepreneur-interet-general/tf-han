@@ -1,14 +1,20 @@
 from importlib import reload
+from pathlib import Path
+from random import normalvariate
 from types import ModuleType
 
+import numpy as np
 import tensorflow as tf
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops, variable_scope
+
+from .constants import padding_token, split_doc_token
 
 try:
     from tensorflow.contrib.rnn import LSTMStateTuple
 except ImportError:
     LSTMStateTuple = tf.nn.rnn_cell.LSTMStateTuple
+
 
 split_doc_token = "|&|"
 padding_token = "<PAD>"
@@ -163,7 +169,7 @@ def f1_score(y_true, y_pred):
         f1s[i] = tf.reduce_mean(f1)
 
     weights = tf.reduce_sum(y_true, axis=0)
-    weights /= tf.reduce_sum(weights)
+    weights = weights / tf.reduce_sum(weights)
 
     f1s[2] = tf.reduce_sum(f1 * weights)
 
@@ -379,7 +385,61 @@ def streaming_f1_from_counts(counts):
         f1_mac = tf.reduce_mean(_f1_mac)
     with tf.variable_scope("weighted"):
         # normalize weights
-        weights /= tf.reduce_sum(weights)
+        weights = weights / tf.reduce_sum(weights)
         f1_wei = tf.reduce_sum(f1_mac * weights)
 
     return f1_mic, f1_mac, f1_wei
+
+
+def normal_choice(lst, mean=None, stddev=None):
+    if mean is None:
+        # if mean is not specified, use center of list
+        mean = (len(lst) - 1) / 2
+
+    if stddev is None:
+        # if stddev is not specified, let list be -3 .. +3 standard deviations
+        stddev = len(lst) / 5
+
+    while True:
+        index = int(normalvariate(mean, stddev) + 0)
+        if 0 <= index < len(lst):
+            return lst[index]
+    # for p in randomizable_params:
+    #     param = list(randomizable_params[p][0])
+    #     vals = [normal_choice(param) for _ in range(100000)]
+    #     plt.hist(vals, bins=param)
+    #     plt.title(p)
+    #     plt.show()
+
+
+def uniform_choice(lst):
+    return np.random.choice(lst)
+
+
+def get_new_dir(path, default_name):
+    path = Path(path)
+    paths = [
+        p.resolve() for p in path.iterdir() if p.is_dir() and default_name in str(p)
+    ]
+    if paths:
+        _id = (
+            max(
+                [0]
+                + [
+                    int(str(p.name).split("_")[-1] if "_" in str(p.name) else "0")
+                    for p in paths
+                ]
+            )
+            + 1
+        )
+        new_name = "{}_{}".format(default_name, _id)
+    else:
+        new_name = default_name
+
+    path /= new_name
+
+    return path.resolve()
+
+
+class EndOfExperiment(Exception):
+    pass
