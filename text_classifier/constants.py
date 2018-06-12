@@ -19,3 +19,4 @@ randomizable_params = {
         "uniform",
     ],
 }
+metrics = ["micro_f1", "macro_f1", "weighted_f1", "accuracy"]
