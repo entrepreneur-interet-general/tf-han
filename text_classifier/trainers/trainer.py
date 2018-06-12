@@ -578,7 +578,7 @@ class Trainer:
                             metrics = self.validate()
 
                             if self.hp.global_step > self.hp.val_every_steps + 5:
-                                raise tf.errors.OutOfRangeError(None, None, 'over')
+                                raise tf.errors.OutOfRangeError(None, None, "over")
 
                         except tf.errors.OutOfRangeError:
                             stop = True
@@ -589,11 +589,15 @@ class Trainer:
                 if self.hp.global_step % self.hp.val_every_steps != 0:
                     # print final validation if not done at the end
                     # of last epoch
+                    metrics = self.validate(force=True)
                     print(
                         "\n[{}] Finally {}".format(
-                            strtime(self.train_start_time), self.validate(force=True)
+                            strtime(self.train_start_time), metrics
                         )
                     )
+                    self.save()
+                    print("Saved.")
+                return metrics
             except KeyboardInterrupt:
                 while True:
                     try:
@@ -606,7 +610,7 @@ class Trainer:
                         elif "d" in answer:
                             self.delete(False)
                             print("Deleted.")
-                        print("\Continue Experiment?")
+                        print("\nContinue Experiment?")
                         answer = input("y/n : ")
                         if "y" not in answer:
                             raise EndOfExperiment("Stopping Experiment")
