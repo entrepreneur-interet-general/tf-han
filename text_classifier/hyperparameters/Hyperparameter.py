@@ -28,7 +28,7 @@ class HP(object):
                 return str(obj)
             if "numpy" in str(type(obj)):
                 return obj.tolist()
-            raise TypeError("(HP) Type %s not serializable" % type(obj))
+            raise TypeError("(HP:json_serial) Type %s not serializable" % type(obj))
 
     @staticmethod
     def load(path_to_HP, name="", file_type="json"):
@@ -82,7 +82,7 @@ class HP(object):
         learning_rate=5e-3,
         max_grad_norm=5.0,
         max_words=1e5,
-        model_type='HAN',
+        model_type="HAN",
         multilabel=False,
         num_classes=5,
         num_threads=4,
@@ -102,7 +102,7 @@ class HP(object):
         train_docs_file="/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_train_07/documents.txt",
         train_labels_file="/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_train_07/labels.txt",
         train_words_file="/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_train_07/words.txt",
-        trainer_type="DST"
+        trainer_type="DST",
     ):
 
         now = datetime.datetime.now()
