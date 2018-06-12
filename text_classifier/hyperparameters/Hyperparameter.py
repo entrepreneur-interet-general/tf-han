@@ -4,7 +4,8 @@ import os
 import pickle as pkl
 from pathlib import Path
 
-from ..utils import is_prop
+from ..constants import padding_token, split_doc_token
+from ..utils import get_new_dir, is_prop
 
 
 class HP(object):
@@ -69,11 +70,12 @@ class HP(object):
     def __init__(
         self,
         experiments_dir="./experiments",
-        base_dir_name=None,
+        base_dir=None,
         batch_size=64,
         cell_size=5,
         decay_steps=10,
         decay_rate=0.99,
+        default_name="trainer",
         dropout=0.6,
         embedding_file="",
         embedding_dim=100,
@@ -86,30 +88,29 @@ class HP(object):
         multilabel=False,
         num_classes=5,
         num_threads=4,
-        pad_word="<PAD>",
+        pad_word=padding_token,
         restored=False,
         retrained=False,
         rnn_layers=6,
         save_steps=1000,
-        split_doc_token="|&|",
+        split_doc_token=split_doc_token,
         summary_secs=1000,
         trainable_embedding_matrix=True,
         val_batch_size=1000,
-        val_every=10,
+        val_every_steps=100,
         version="v2",
         val_docs_file="/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_val_01/documents.txt",
         val_labels_file="/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_val_01/labels.txt",
         train_docs_file="/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_train_07/documents.txt",
         train_labels_file="/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_train_07/labels.txt",
         train_words_file="/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_train_07/words.txt",
-        trainer_type="DST",
     ):
 
         now = datetime.datetime.now()
         self._str_no_k = ["dir"]
         self._path = ""
         self.created_at = int(now.timestamp())
-        self.base_dir_name = base_dir_name or str(now)[:10]
+        self.base_dir = base_dir or str(now)[:10]
         self.experiments_dir = Path(experiments_dir).resolve()
 
         self.version = version
@@ -118,7 +119,7 @@ class HP(object):
         self.batch_size = batch_size
         self.num_classes = num_classes
         self.epochs = epochs
-        self.val_every = val_every
+        self.val_every_steps = val_every_steps
         self.trainable_embedding_matrix = trainable_embedding_matrix
         self.cell_size = cell_size
         self.embedding_file = embedding_file
@@ -141,10 +142,10 @@ class HP(object):
         self.num_threads = num_threads
         self.embedding_dim = embedding_dim
         self.rnn_layers = rnn_layers
-        self.trainer_type = trainer_type
         self.model_type = model_type
         self.pad_word = pad_word
         self.split_doc_token = split_doc_token
+        self.default_name = default_name
 
         self.vocab_size = None
         self.path_initialized = False
@@ -231,41 +232,18 @@ class HP(object):
         """Returns a pathlib object whith the parameter's directory.
         If it's the first time the dir is accessed, it is created.
         Cannonical path is:
-        currentworkingdirectory/models/
-            <self.version>/<self.base_dir_name>_<new_index>
+        currentworkingdirectory/models/<self.base_dir>_<new_index>
 
         Returns:
             pathlib Path: The HP's directory
         """
-        path = self.experiments_dir / self.version
-        path /= self.base_dir_name
-        if not path.exists():
-            path.mkdir(parents=True)
+
+        if not self.base_dir.exists():
+            self.base_dir.mkdir(parents=True)
 
         if not self.path_initialized:
-            paths = [
-                p.resolve()
-                for p in path.iterdir()
-                if p.is_dir() and self.base_dir_name in str(p)
-            ]
-            if paths:
-                _id = (
-                    max(
-                        [0]
-                        + [
-                            int(str(p).split("_")[-1] if "_" in str(p) else "0")
-                            for p in paths
-                        ]
-                    )
-                    + 1
-                )
-                new_name = "{}_{}".format(self.base_dir_name, _id)
-            else:
-                new_name = self.base_dir_name
-
-            self.id = "{} | {}".format(self.version, new_name)
-
-            path /= new_name
+            path = get_new_dir(self.base_dir, self.default_name)
+            self.id = "{} | {}".format(self.version, path.name)
             path.mkdir()
 
             self._path = path
