@@ -222,8 +222,8 @@ def get_graph_op(graph, and_conds=None, op="and", or_conds=None):
 
     if op == "and":
         return [n for n in node_names if n in ands.intersection(ors)]
-    else:
-        return [n for n in node_names if n in ands.union(ors)]
+
+    return [n for n in node_names if n in ands.union(ors)]
 
 
 def extract_words(string):
