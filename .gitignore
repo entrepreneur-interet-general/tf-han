@@ -8,3 +8,4 @@ experiments/
 *__pycache__*
 *.pkl
 *.zip
+*.pytest_cache
