@@ -7,3 +7,4 @@ experiments/
 .DS_Store
 *__pycache__*
 *.pkl
+*.zip
