@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 
-from ..utils.tf_utils import one_hot_label
+from ..utils.tf_utils import one_hot_label, one_hot_multi_label
 from .trainer import Trainer
 
 
@@ -21,8 +21,10 @@ class DST(Trainer):
         doc_ds = doc_ds.map(self.extract_sents, self.hp.num_threads)
         doc_ds = doc_ds.map(self.extract_words, self.hp.num_threads)
         doc_ds = doc_ds.map(self.words.lookup, self.hp.num_threads)
-
-        label_ds = label_ds.map(one_hot_label, self.hp.num_threads)
+        if self.hp.multilabel:
+            label_ds = label_ds.map(one_hot_label, self.hp.num_threads)
+        else:
+            label_ds = label_ds.map(one_hot_multi_label, self.hp.num_threads)
         return doc_ds, label_ds
 
     def make_datasets(self):

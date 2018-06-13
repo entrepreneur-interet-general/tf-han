@@ -243,6 +243,21 @@ def one_hot_label(string_label):
     return tf.one_hot(tf.string_to_number(string_label, out_type=tf.int64), 5, 1, 0)
 
 
+def one_hot_multi_label(string_one_hot):
+    """Converts a one-hot string multilabel to a tf.int64 tensor:
+    "1.0, 0.0, 1.0, 0.0, 0.0" -> [1, 0, 1, 0, 0]
+    
+    Args:
+        string_one_hot (Tensor): string label to convert
+    
+    Returns:
+        Tensor: tf.int64 Tensor of one-hot encoded labels
+    """
+    vals = tf.string_split([string_one_hot], ", ").values
+    numbs = tf.string_to_number(vals, out_type=tf.float64)
+    return tf.cast(numbs, tf.int64)
+
+
 def metric_variable(shape, dtype, validate_shape=True, name=None):
     """Create variable in `GraphKeys.(LOCAL|METRIC_VARIABLES`) collections.
     from https://github.com/tensorflow/tensorflow/blob
