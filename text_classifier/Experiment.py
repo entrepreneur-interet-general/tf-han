@@ -9,9 +9,10 @@ import pandas as pd
 import yaml
 from munch import DefaultMunch
 
-from .constants import metrics, randomizable_params
+from .constants import metrics
 from .hyperparameters import HP
 from .trainers import DST
+from .utils import default_conf
 from .utils.utils import (
     EndOfExperiment,
     get_new_dir,
@@ -29,37 +30,32 @@ class Experiment(object):
         self.log = None
         self.trainer = None
         self.tee = None
-        self.summary = {
-            "params": {p: [] for p in randomizable_params},
-            "other": {},
-            "metrics": {m: [] for m in metrics},
-        }
         self.current_run = 0
 
         if self.conf_path:
             self.set_conf(self.conf_path)
-            if experiments_dir:
-                self.conf.experiments_dir = experiments_dir
-            if not self.conf.exp_id:
-                self.conf.exp_id = str(datetime.datetime.now())[:10]
         else:
-            self.conf = DefaultMunch(None)
-            self.conf.exp_id = str(datetime.datetime.now())[:10]
-            self.conf.trainer_type = "DST"
-            self.conf.randomizable_params = DefaultMunch(None).fromDict(
-                randomizable_params
-            )
+            self.conf = DefaultMunch(None).fromDict(default_conf)
+
+        if experiments_dir:
             self.conf.experiments_dir = experiments_dir
-
         assert self.conf.experiments_dir is not None
-
         self.conf.experiments_dir = Path(self.conf.experiments_dir).resolve()
 
         if not self.conf.experiments_dir.exists():
             print("Creating %s" % str(self.conf.experiments_dir))
-            self.conf.experiments_dir.mkdir(parents=True)
-
         self.dir = get_new_dir(self.conf.experiments_dir, self.conf.exp_id)
+
+        if not self.conf.exp_id:
+            self.conf.exp_id = str(datetime.datetime.now())[:10]
+
+        self.conf.experiments_dir.mkdir(parents=True)
+
+        self.summary = {
+            "params": {p: [] for p in self.conf.randomizable_params},
+            "other": {},
+            "metrics": {m: [] for m in metrics},
+        }
 
     def set_conf(self, path):
         with open(path, "r") as f:
