@@ -1,0 +1,105 @@
+
+# Where experiments are stored.
+experiments_dir: /Users/victor/Documents/Tracfin/dev/han/experiments/
+
+# The experiment's id. 
+# If `exp_id: null`, then `exp_id` will be the current date as 2018-06-21
+# If not unique, `_i` will be appended to `exp_id` with `i` being the
+# number of existing experiments with the same id in `experiments_dir`
+exp_id: null
+
+# Only type of Trainer is DST so far
+trainer_type: DST
+
+# Number of runs to performs <=> number of points in the hyperparameter space to sample
+# If `n_runs: null` then `n_runs` will be np.iinfo(int).max = 2^63 - 1 = 9223372036854775807
+n_runs: 4
+
+# Default storage behavior:
+# experiments_dir/exp_id/trainer
+# experiments_dir/exp_id/trainer_1
+# ...(`n_runs` trainers)
+# experiments_dir/exp_id/summary.txt
+# experiments_dir/exp_id/params.csv
+# experiments_dir/exp_id/metrics.csv
+# experiments_dir/exp_id/conf.yaml
+
+# data paths. If null, will use the Hyperparameter's default settings.
+data_paths:
+    train_docs_file: null
+    train_words_file: null
+    val_docs_file: null
+
+randomizable_params:
+    # * type: 
+    #   if range -> the value will be drawn from np.arange(min, max, step)
+    #   if list -> the value will be drawn from np.array(values)
+    #   if fixed -> no drawing, deterministic value
+    #
+    # * distribution:
+    #   either uniform or normal. If normal, a value is drawn according to its index in the list of values:
+    #       mean: middle of list, std: len(list) / 5 | see tcl.utils.normal_choice
+    # 
+    # * min, max, step: arguments to np.arange ; use with type: range
+    #
+    # * vals: user-specified values the parameter can take ; use with type: list
+
+    batch_size:
+        type: range
+        distribution: uniform
+        min: 32
+        max: 64
+        step: 32
+
+    # All cells have the same size accross layers and for the 2 bidirectional rrns (sentence and word levels) 
+    cell_size:
+        type: range
+        distribution: uniform
+        min: 1
+        max: 5
+        step: 1
+
+    # Applied to all rnns and dense layers
+    dropout:
+        type: range
+        distribution: normal
+        min: 0.5
+        max: 0.9
+        step: 0.05
+
+    # Default behaviour is to train a random embedding.
+    # Can't use pretrained yet
+    embedding_dim:
+        type: range
+        distribution: uniform
+        min: 20
+        max: 30
+        step: 10
+
+    epochs:
+        type: range
+        distribution: uniform
+        min: 1
+        max: 5
+        step: 1
+
+    # Learning rate is decayed by 1% every 10 steps
+    learning_rate:
+        type: list
+        distribution: uniform
+        vals: # use `vals` because `values` is a Munch() method
+            - 0.00001
+            - 0.00005
+            - 0.0001
+            - 0.0005
+            - 0.001
+            - 0.005
+            - 0.01
+
+    # Depth of both bidirectional rrns (sentence and word levels) 
+    rnn_layers:
+        type: range
+        distribution: uniform
+        min: 1
+        max: 5
+        step: 1
