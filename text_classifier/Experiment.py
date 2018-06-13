@@ -84,6 +84,8 @@ class Experiment(object):
                 value = normal_choice(values)
             elif p.distribution == "uniform":
                 value = uniform_choice(values)
+            elif p.distribution == "deterministic":
+                value = values[self.current_run % len(values)]
 
             setattr(self.trainer.hp, p_name, value.tolist())
             self.summary["params"][p_name].append(value)
@@ -119,7 +121,7 @@ class Experiment(object):
     def setup(self, log=True):
         if self.conf.trainer_type == "DST":
             hp = HP(base_dir=self.dir)
-            for attr, val in self.conf.data_paths.items():
+            for attr, val in self.conf.hyperparameter.items():
                 if val is not None:
                     setattr(hp, attr, val)
             self.trainer = DST(hp=hp)
