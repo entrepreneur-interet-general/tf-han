@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 
-from ..utils import one_hot_label
+from ..utils.tf_utils import one_hot_label
 from .trainer import Trainer
 
 

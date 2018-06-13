@@ -10,7 +10,8 @@ from tensorflow.python.saved_model import tag_constants
 
 from ..hyperparameters import HP
 from ..models import HAN
-from ..utils import streaming_f1, EndOfExperiment
+from ..utils.tf_utils import streaming_f1
+from ..utils.utils import EndOfExperiment
 
 
 def strtime(ref):

@@ -5,7 +5,7 @@ import pickle as pkl
 from pathlib import Path
 
 from ..constants import padding_token, split_doc_token
-from ..utils import get_new_dir, is_prop
+from ..utils.utils import get_new_dir, is_prop
 
 
 class HP(object):
