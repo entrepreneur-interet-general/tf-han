@@ -26,6 +26,9 @@ n_runs: 4
 
 # overriding the trainers hp -> If null, will use the Hyperparameter's default settings.
 hyperparameter:
+    # multi-label -> a labels_file line should be one-hot csv integers : 0, 1, 0, 0, 0, 1 ... 
+    #                /!\ not 0.0, 1.0 ... there would be a type error (float vs int)
+    # single label -> a labels_file line should be the label : 1 or 3 etc.
     train_docs_file: /Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_train_07/documents.txt
     train_labels_file: /Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_train_07/labels.txt
     train_words_file: /Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_train_07/words.txt
