@@ -2,7 +2,7 @@ import tensorflow as tf
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops, variable_scope
 
-from ..constants import padding_token, split_doc_token
+from ..constants import padding_token, split_doc_token, split_label_token
 
 try:
     from tensorflow.contrib.rnn import LSTMStateTuple
@@ -253,7 +253,7 @@ def one_hot_multi_label(string_one_hot):
     Returns:
         Tensor: tf.int64 Tensor of one-hot encoded labels
     """
-    vals = tf.string_split([string_one_hot], ", ").values
+    vals = tf.string_split([string_one_hot], split_label_token).values
     numbs = tf.string_to_number(vals, out_type=tf.float64)
     return tf.cast(numbs, tf.int64)
 
