@@ -1,7 +1,7 @@
 import builtins
 
 
-from .Experiment import Experiment
+from .experiment import Experiment
 from .hyperparameters import HP
 
 try:
