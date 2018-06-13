@@ -1,5 +1,6 @@
 split_doc_token = "|&|"
 padding_token = "<PAD>"
+split_label_token = ", "
 randomizable_params = {
     "cell_size": [1, 5, 1, "range", "uniform"],
     "rnn_layers": [1, 2, 1, "range", "uniform"],
