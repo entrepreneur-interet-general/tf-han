@@ -23,7 +23,7 @@ from .utils.utils import (
 
 
 class Experiment(object):
-    def __init__(self, experiments_dir="./experiments", conf_path=None, hp=None):
+    def __init__(self, conf_path=None,experiments_dir=None,  hp=None):
 
         self.conf_path = conf_path
         self.conf = None
