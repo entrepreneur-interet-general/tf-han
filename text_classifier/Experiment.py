@@ -1,5 +1,4 @@
 import datetime
-import json
 import shutil
 import sys
 from pathlib import Path
@@ -23,7 +22,7 @@ from .utils.utils import (
 
 
 class Experiment(object):
-    def __init__(self, conf_path=None,experiments_dir=None,  hp=None):
+    def __init__(self, conf_path=None, experiments_dir=None, hp=None):
 
         self.conf_path = conf_path
         self.conf = None
@@ -44,12 +43,11 @@ class Experiment(object):
 
         if not self.conf.experiments_dir.exists():
             print("Creating %s" % str(self.conf.experiments_dir))
+            self.conf.experiments_dir.mkdir(parents=True)
         self.dir = get_new_dir(self.conf.experiments_dir, self.conf.exp_id)
 
         if not self.conf.exp_id:
             self.conf.exp_id = str(datetime.datetime.now())[:10]
-
-        self.conf.experiments_dir.mkdir(parents=True)
 
         self.summary = {
             "params": {p: [] for p in self.conf.randomizable_params},
@@ -75,13 +73,13 @@ class Experiment(object):
                 value = np.array(p.value)
             else:
                 raise ValueError("Unkonw type {} for {}".format(p.type, p_name))
-
-            if p.distribution == "normal":
-                value = normal_choice(values)
-            elif p.distribution == "uniform":
-                value = uniform_choice(values)
-            elif p.distribution == "deterministic":
-                value = values[self.current_run % len(values)]
+            if p.type != "fixed":
+                if p.distribution == "normal":
+                    value = normal_choice(values)
+                elif p.distribution == "uniform":
+                    value = uniform_choice(values)
+                elif p.distribution == "deterministic":
+                    value = values[self.current_run % len(values)]
 
             setattr(self.trainer.hp, p_name, value.tolist())
             self.summary["params"][p_name].append(value)
