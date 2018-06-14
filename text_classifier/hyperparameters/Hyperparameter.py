@@ -7,6 +7,8 @@ from pathlib import Path
 from ..constants import padding_token, split_doc_token
 from ..utils.utils import get_new_dir, is_prop
 
+path_to_yelp = "/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/"
+
 
 class HP(object):
     @staticmethod
@@ -99,11 +101,11 @@ class HP(object):
         val_batch_size=1000,
         val_every_steps=100,
         version="v2",
-        val_docs_file="/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_val_01/documents.txt",
-        val_labels_file="/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_val_01/labels.txt",
-        train_docs_file="/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_train_07/documents.txt",
-        train_labels_file="/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_train_07/labels.txt",
-        train_words_file="/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_train_07/words.txt",
+        val_docs_file=path_to_yelp + "sample_0001_val_01/documents.txt",
+        val_labels_file=path_to_yelp + "sample_0001_val_01/labels.txt",
+        train_docs_file=path_to_yelp + "sample_0001_train_07/documents.txt",
+        train_labels_file=path_to_yelp + "sample_0001_train_07/labels.txt",
+        train_words_file=path_to_yelp + "sample_0001_train_07/words.txt",
     ):
 
         now = datetime.datetime.now()

@@ -1,6 +1,6 @@
 import tensorflow as tf
-from tensorflow.python.framework import ops
-from tensorflow.python.ops import array_ops, variable_scope
+from tensorflow.python.framework import ops  # pylint: disable=E0611
+from tensorflow.python.ops import array_ops, variable_scope   # pylint: disable=E0611
 
 from ..constants import padding_token, split_doc_token, split_label_token
 
@@ -395,3 +395,9 @@ def streaming_f1_from_counts(counts):
         f1_wei = tf.reduce_sum(f1_mac * weights)
 
     return f1_mic, f1_mac, f1_wei
+
+
+def multi_label_hot(prediction, threshold=0.5):
+    prediction = tf.cast(prediction, tf.float32)
+    threshold = float(threshold)
+    return tf.cast(tf.greater(prediction, threshold), tf.int64)

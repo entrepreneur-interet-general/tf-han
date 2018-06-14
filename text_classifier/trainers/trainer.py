@@ -1,12 +1,11 @@
 import json
 import shutil
-from importlib import reload
 from pathlib import Path
 from time import time
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.saved_model import tag_constants
+from tensorflow.python.saved_model import tag_constants   # pylint: disable=E0611
 
 from ..hyperparameters import HP
 from ..models import HAN
@@ -108,6 +107,8 @@ class Trainer:
         self.training_summary_op = None
         self.val_metrics_summary_op = None
         self.train_metrics_summary_op = None
+        self.one_hot_predictions = None
+        self.words = None
 
         self.metrics = {}
         self.summary_ops = {}
@@ -151,7 +152,7 @@ class Trainer:
                     "prediction": self.model.prediction,
                     "logits": self.model.logits,
                 }
-                tf.saved_model.simple_save(
+                tf.saved_model.simple_save(  # pylint: disable=E1101
                     self.sess,
                     str(self.hp.dir / "checkpoints" / "simple"),
                     inputs,
@@ -188,7 +189,7 @@ class Trainer:
     def restore(checkpoint_dir, hp_name="", hp_ext="json", simple_save=True):
         if simple_save:
             checkpoint_dir = Path(checkpoint_dir).resolve()
-            hp = hyp.HP.load(checkpoint_dir, hp_name, hp_ext)
+            hp = HP.load(checkpoint_dir, hp_name, hp_ext)
             trainer = Trainer("HAN", hp, restored=True)
             tf.saved_model.loader.load(
                 trainer.sess,
@@ -206,11 +207,12 @@ class Trainer:
                 setattr(trainer.model, k, trainer.graph.get_tensor_by_name(v))
 
         else:
-            hp = hyp.HP.load(checkpoint_dir, hp_name, hp_ext)
+            hp = HP.load(checkpoint_dir, hp_name, hp_ext)
             trainer = Trainer("HAN", hp, restored=True)
             trainer.prepare()
             trainer.saver = tf.train.Saver(tf.global_variables())
             ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
+            # pylint: disable=E1101
             trainer.saver.restore(trainer.sess, ckpt.model_checkpoint_path)
 
         return trainer
@@ -492,8 +494,9 @@ class Trainer:
         self.val_writer.add_summary(s, self.hp.global_step)
         self.val_writer.flush()
         self.train_writer.flush()
-        for _ in self.one_hot_predictions:
-            print(_.sum(axis=0))
+
+        print("\n", np.sum([_.sum(axis=0) for _ in self.one_hot_predictions], axis=0))
+
         return acc, mic, mac, wei
 
     def epoch_string(self, epoch, loss, lr, metrics):
@@ -578,9 +581,6 @@ class Trainer:
 
                             metrics = self.validate()
 
-                            if self.hp.global_step > self.hp.val_every_steps + 5:
-                                raise tf.errors.OutOfRangeError(None, None, "over")
-
                         except tf.errors.OutOfRangeError:
                             stop = True
                         finally:
@@ -618,9 +618,3 @@ class Trainer:
                         break
                     except KeyboardInterrupt:
                         raise EndOfExperiment("Stopping Experiment")
-
-
-if __name__ == "__main__":
-    # import Trainer as TR; import Hyperparameter as hyp; from importlib import reload
-    # tr = TR.Trainer('HAN'); tr.train()
-    pass

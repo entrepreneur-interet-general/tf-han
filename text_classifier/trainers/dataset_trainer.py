@@ -22,9 +22,9 @@ class DST(Trainer):
         doc_ds = doc_ds.map(self.extract_words, self.hp.num_threads)
         doc_ds = doc_ds.map(self.words.lookup, self.hp.num_threads)
         if self.hp.multilabel:
-            label_ds = label_ds.map(one_hot_label, self.hp.num_threads)
-        else:
             label_ds = label_ds.map(one_hot_multi_label, self.hp.num_threads)
+        else:
+            label_ds = label_ds.map(one_hot_label, self.hp.num_threads)
         return doc_ds, label_ds
 
     def make_datasets(self):
@@ -35,7 +35,7 @@ class DST(Trainer):
                         tf.TensorShape([None, None]),
                         tf.TensorShape([None]),
                     )
-                    padding_values = (np.int64(0), 0)
+                    padding_values = (np.int64(0), np.int64(0))
 
                     with tf.variable_scope("vocab-lookup"):
                         self.words = tf.contrib.lookup.index_table_from_file(
@@ -79,7 +79,7 @@ class DST(Trainer):
                             tf.int64, [None, None, None], "features_data_ph"
                         )
                         self.labels_data_ph = tf.placeholder(
-                            tf.int32, [None, self.hp.num_classes], "labels_data_ph"
+                            tf.int64, [None, self.hp.num_classes], "labels_data_ph"
                         )
                         infer_dataset = tf.data.Dataset.from_tensor_slices(
                             (self.features_data_ph, self.labels_data_ph)
