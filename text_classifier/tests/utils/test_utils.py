@@ -84,4 +84,3 @@ def test_get_new_dir_increment(tmpdir):
     tdir = str(tmpdir)
     newdir = tmpdir.mkdir("newdir_1")
     assert str(get_new_dir(Path(tdir), "newdir")) == str(newdir)[:-1] + "2"
-
