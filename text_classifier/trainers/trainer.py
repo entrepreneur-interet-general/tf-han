@@ -615,6 +615,7 @@ class Trainer:
                         answer = input("y/n : ")
                         if "y" not in answer:
                             raise EndOfExperiment("Stopping Experiment")
-                        break
+                        else:
+                            return metrics
                     except KeyboardInterrupt:
                         raise EndOfExperiment("Stopping Experiment")
