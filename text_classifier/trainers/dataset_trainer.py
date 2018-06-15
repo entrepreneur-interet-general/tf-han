@@ -6,6 +6,11 @@ from .trainer import Trainer
 
 
 class DST(Trainer):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.padding_values = None
+
     def extract_words(self, token):
         # Split characters
         out = tf.string_split(token, delimiter=" ")
@@ -35,7 +40,10 @@ class DST(Trainer):
                         tf.TensorShape([None, None]),
                         tf.TensorShape([None]),
                     )
-                    padding_values = (np.int64(0), np.int64(0))
+                    if self.hp.dtype == 32:
+                        self.padding_values = (np.int64(0), np.int32(0))
+                    else:
+                        self.padding_values = (np.int64(0), np.int64(0))
 
                     with tf.variable_scope("vocab-lookup"):
                         self.words = tf.contrib.lookup.index_table_from_file(
@@ -51,36 +59,41 @@ class DST(Trainer):
                         dds, lds = self.preprocess_dataset(
                             train_doc_ds, train_labels_ds
                         )
-                        train_ds = tf.data.Dataset.zip((dds, lds))
-                        train_ds = train_ds.shuffle(
+                        self.train_dataset = tf.data.Dataset.zip((dds, lds))
+                        self.train_dataset = self.train_dataset.shuffle(
                             10000, reshuffle_each_iteration=True
                         )
-                        train_ds = train_ds.padded_batch(
-                            self.batch_size_ph, padded_shapes, padding_values
+                        self.train_dataset = self.train_dataset.padded_batch(
+                            self.batch_size_ph, padded_shapes, self.padding_values
                         )
-                        train_ds = train_ds.prefetch(10)
-                        self.train_dataset = train_ds
+                        self.train_dataset = self.train_dataset.prefetch(10)
 
                     with tf.variable_scope("val"):
                         val_doc_ds = tf.data.TextLineDataset(self.hp.val_docs_file)
                         val_labels_ds = tf.data.TextLineDataset(self.hp.val_labels_file)
 
                         dds, lds = self.preprocess_dataset(val_doc_ds, val_labels_ds)
-                        val_ds = tf.data.Dataset.zip((dds, lds))
-                        val_ds = val_ds.shuffle(10000, reshuffle_each_iteration=True)
-                        val_ds = val_ds.padded_batch(
-                            self.batch_size_ph, padded_shapes, padding_values
+                        self.val_dataset = tf.data.Dataset.zip((dds, lds))
+                        self.val_dataset = self.val_dataset.shuffle(
+                            10000, reshuffle_each_iteration=True
                         )
-                        val_ds = val_ds.prefetch(10)
-                        self.val_dataset = val_ds
+                        self.val_dataset = self.val_dataset.padded_batch(
+                            self.batch_size_ph, padded_shapes, self.padding_values
+                        )
+                        self.val_dataset = self.val_dataset.prefetch(10)
 
                     with tf.variable_scope("infer"):
                         self.features_data_ph = tf.placeholder(
                             tf.int64, [None, None, None], "features_data_ph"
                         )
-                        self.labels_data_ph = tf.placeholder(
-                            tf.int64, [None, self.hp.num_classes], "labels_data_ph"
-                        )
+                        if self.hp.dtype == 32:
+                            self.labels_data_ph = tf.placeholder(
+                                tf.int32, [None, self.hp.num_classes], "labels_data_ph"
+                            )
+                        else:
+                            self.labels_data_ph = tf.placeholder(
+                                tf.int64, [None, self.hp.num_classes], "labels_data_ph"
+                            )
                         infer_dataset = tf.data.Dataset.from_tensor_slices(
                             (self.features_data_ph, self.labels_data_ph)
                         )
