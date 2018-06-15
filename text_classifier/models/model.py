@@ -75,7 +75,9 @@ class Model:
                         axis=0,
                         name="mean-sig-xent-per-class",
                     )
-                    tf.summary.histogram("per_class_loss", self.per_class_loss)
+                    tf.summary.histogram(
+                        "per_class_loss", self.per_class_loss, collections=["training"]
+                    )
                     self.loss = tf.reduce_sum(self.per_class_loss, name="mean-sig-xent")
 
                 else:
