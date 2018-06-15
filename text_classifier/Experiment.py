@@ -135,6 +135,8 @@ class Experiment(object):
         shutil.rmtree(self.dir)
 
     def update_metrics(self, metrics):
+        if metrics is None:
+            metrics = None, None, None, None
         acc, mic, mac, wei = metrics
         self.summary["metrics"]["micro_f1"].append(mic)
         self.summary["metrics"]["macro_f1"].append(mac)
