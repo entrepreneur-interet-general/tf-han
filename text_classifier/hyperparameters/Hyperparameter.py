@@ -79,6 +79,7 @@ class HP(object):
         decay_rate=0.99,
         default_name="trainer",
         dropout=0.6,
+        dtype=32,
         embedding_file="",
         embedding_dim=100,
         epochs=20,
@@ -148,6 +149,7 @@ class HP(object):
         self.pad_word = pad_word
         self.split_doc_token = split_doc_token
         self.default_name = default_name
+        self.dtype = dtype
 
         self.vocab_size = None
         self.path_initialized = False
