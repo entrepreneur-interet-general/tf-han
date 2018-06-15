@@ -44,10 +44,11 @@ class Experiment(object):
         if not self.conf.experiments_dir.exists():
             print("Creating %s" % str(self.conf.experiments_dir))
             self.conf.experiments_dir.mkdir(parents=True)
-        self.dir = get_new_dir(self.conf.experiments_dir, self.conf.exp_id)
 
         if not self.conf.exp_id:
             self.conf.exp_id = str(datetime.datetime.now())[:10]
+
+        self.dir = get_new_dir(self.conf.experiments_dir, self.conf.exp_id)
 
         self.summary = {
             "params": {p: [] for p in self.conf.randomizable_params},
