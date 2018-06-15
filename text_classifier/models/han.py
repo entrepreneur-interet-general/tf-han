@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.client import device_lib
 
-from ..utils.tf_utils import bidirectional_rnn, task_specific_attention
+from ..utils.tf_utils import bidirectional_rnn, task_specific_attention, get_graph_op
 from .model import Model
 
 MultiRNNCell = tf.nn.rnn_cell.MultiRNNCell
@@ -135,6 +135,15 @@ class HAN(Model):
             self.logits = tf.layers.dense(
                 self.doc_output, self.hp.num_classes, activation=None
             )
+
+            k_name = get_graph_op(tf.get_default_graph(), ["classifier", "kernel"])[0]
+            kernel = tf.get_default_graph().get_tensor_by_name(k_name)
+            b_name = get_graph_op(tf.get_default_graph(), ["classifier", "bias"])[0]
+            bias = tf.get_default_graph().get_tensor_by_name(b_name)
+
+            tf.summary.histogram("kernel", kernel)
+            tf.summary.histogram("bias", bias)
+            tf.summary.histogram("logits", self.logits)
 
             self.prediction = (
                 tf.sigmoid(self.logits)
