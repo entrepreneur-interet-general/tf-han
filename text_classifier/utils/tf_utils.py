@@ -1,6 +1,6 @@
 import tensorflow as tf
 from tensorflow.python.framework import ops  # pylint: disable=E0611
-from tensorflow.python.ops import array_ops, variable_scope   # pylint: disable=E0611
+from tensorflow.python.ops import array_ops, variable_scope  # pylint: disable=E0611
 
 from ..constants import padding_token, split_doc_token, split_label_token
 
