@@ -87,7 +87,11 @@ def get_new_dir(path, default_name):
     Returns:
         pathlib.Path: new directory to create
     """
+    assert isinstance(default_name, str)
+
     path = Path(path)
+    assert path.exists()
+
     paths = [
         p.resolve() for p in path.iterdir() if p.is_dir() and default_name in str(p)
     ]
