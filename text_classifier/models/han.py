@@ -136,14 +136,26 @@ class HAN(Model):
                 self.doc_output, self.hp.num_classes, activation=None
             )
 
-            k_name = get_graph_op(tf.get_default_graph(), ["classifier", "kernel"])[0]
-            kernel = tf.get_default_graph().get_tensor_by_name(k_name)
-            b_name = get_graph_op(tf.get_default_graph(), ["classifier", "bias"])[0]
-            bias = tf.get_default_graph().get_tensor_by_name(b_name)
+            k_name = [
+                n.name
+                for n in tf.get_default_graph().as_graph_def().node
+                if "classifier" in n.name
+                and "kernel" in n.name
+                and not n.name.split("kernel")[-1]
+            ][0]
+            kernel = tf.get_default_graph().get_tensor_by_name(k_name + ":0")
+            b_name = [
+                n.name
+                for n in tf.get_default_graph().as_graph_def().node
+                if "classifier" in n.name
+                and "bias" in n.name
+                and not n.name.split("bias")[-1]
+            ][0]
+            bias = tf.get_default_graph().get_tensor_by_name(b_name + ":0")
 
-            tf.summary.histogram("kernel", kernel)
-            tf.summary.histogram("bias", bias)
-            tf.summary.histogram("logits", self.logits)
+            tf.summary.histogram("kernel", kernel, collections=["training"])
+            tf.summary.histogram("bias", bias, collections=["training"])
+            tf.summary.histogram("logits", self.logits, collections=["training"])
 
             self.prediction = (
                 tf.sigmoid(self.logits)
