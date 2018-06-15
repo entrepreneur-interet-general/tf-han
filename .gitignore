@@ -1,7 +1,6 @@
 tf7/
 data/
 .vscode/
-models/
 experiments/
 .env
 .DS_Store
