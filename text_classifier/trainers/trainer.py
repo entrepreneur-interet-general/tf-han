@@ -5,7 +5,7 @@ from time import time
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.saved_model import tag_constants   # pylint: disable=E0611
+from tensorflow.python.saved_model import tag_constants  # pylint: disable=E0611
 
 from ..hyperparameters import HP
 from ..models import HAN
@@ -57,58 +57,59 @@ class Trainer:
             ValueError: if the model is unknown or if model_type
                 is "reuse" but model is None
         """
-        self.hp = hp or HP()
-        self.model_type = model_type or self.hp.model_type
         self.graph = graph or tf.Graph()
-        self.sess = sess or tf.Session(graph=self.graph)
-        self.prepared = False
-        self.inferences = []
+        self.hp = hp or HP()
         self.hp.restored = restored
+        self.inferences = []
+        self.model_type = model_type or self.hp.model_type
         self.new_procs = True
+        self.prepared = False
+        self.sess = sess or tf.Session(graph=self.graph)
 
-        self.server = None
-        self.summary_op = None
-        self.train_op = None
+        self.accuracy = None
         self.features_data_ph = None
-        self.labels_data_ph = None
-        self.val_iter = None
-        self.val_dataset = None
-        self.train_iter = None
-        self.train_dataset = None
-        self.infer_iter = None
+        self.global_step_var = None
         self.infer_dataset = None
+        self.infer_dataset_init_op = None
+        self.infer_iter = None
         self.input_tensor = None
+        self.is_infering = None
+        self.labels_data_ph = None
         self.labels_tensor = None
         self.learning_rate = None
-        self.y_pred = None
-        self.train_writer = None
-        self.val_writer = None
-        self.global_step_var = None
-        self.train_start_time = None
-        self.accuracy = None
-        self.micro_f1 = None
         self.macro_f1 = None
-        self.weighted_f1 = None
-        self.val_feats = None
-        self.val_labs = None
-        self.val_bs = None
-        self.train_feats = None
-        self.train_labs = None
-        self.train_bs = None
-        self.saver = None
+        self.metrics_updates = None
+        self.micro_f1 = None
+        self.one_hot_predictions = None
         self.ref_feats = None
         self.ref_labs = None
-        self.val_dataset_init_op = None
-        self.infer_dataset_init_op = None
-        self.train_dataset_init_op = None
-        self.val_size = None
-        self.metrics_updates = None
+        self.saver = None
+        self.server = None
+        self.summary_op = None
+        self.train_bs = None
         self.train_data_length = None
-        self.training_summary_op = None
-        self.val_metrics_summary_op = None
+        self.train_dataset = None
+        self.train_dataset_init_op = None
+        self.train_feats = None
+        self.train_iter = None
+        self.train_labs = None
         self.train_metrics_summary_op = None
-        self.one_hot_predictions = None
+        self.train_op = None
+        self.train_start_time = None
+        self.train_writer = None
+        self.training_summary_op = None
+        self.val_bs = None
+        self.val_dataset = None
+        self.val_dataset_init_op = None
+        self.val_feats = None
+        self.val_iter = None
+        self.val_labs = None
+        self.val_metrics_summary_op = None
+        self.val_size = None
+        self.val_writer = None
+        self.weighted_f1 = None
         self.words = None
+        self.y_pred = None
 
         self.metrics = {}
         self.summary_ops = {}
@@ -133,10 +134,10 @@ class Trainer:
                 trainable=False,
             )
             self.batch_size_ph = tf.placeholder(tf.int64, name="batch_size_ph")
-            self.mode_ph = tf.placeholder(tf.int32, name="mode_ph")
-            self.shuffle_val_ph = tf.placeholder(tf.bool, name="shuffle_val_ph")
+            self.mode_ph = tf.placeholder(tf.string, name="mode_ph")
+            self.is_infering = tf.equal(self.mode_ph, "infer")
             self.model.mode_ph = self.mode_ph
-            self.model.is_training = tf.equal(self.mode_ph, 0)
+            self.model.is_training = tf.equal(self.mode_ph, "train")
 
     def save(self, path=None, simple_save=True, ckpt_save=True):
         with self.graph.as_default():
@@ -146,7 +147,6 @@ class Trainer:
                     "batch_size_ph": self.batch_size_ph,
                     "features_data_ph": self.features_data_ph,
                     "labels_data_ph": self.labels_data_ph,
-                    "shuffle_val_ph": self.shuffle_val_ph,
                 }
                 outputs = {
                     "prediction": self.model.prediction,
@@ -296,7 +296,7 @@ class Trainer:
                     self.model.is_training,
                     self.train_iter.get_next,
                     lambda: tf.cond(
-                        self.shuffle_val_ph,
+                        self.is_infering,
                         self.val_iter.get_next,
                         self.infer_iter.get_next,
                     ),
@@ -305,11 +305,12 @@ class Trainer:
     def make_datasets(self):
         raise NotImplementedError("Implement make_datasets")
 
-    def get_input_pair(self, is_val=False, shuffle_val=True):
+    def get_input_pair(self, is_val=False):
         self.initialize_iterators(is_val)
+        mode = 'val' if is_val else 'train'
         return self.sess.run(
             [self.input_tensor, self.labels_tensor],
-            feed_dict={self.mode_ph: int(is_val), self.shuffle_val_ph: True},
+            feed_dict={self.mode_ph: mode},
         )
 
     def set_metrics(self):
@@ -440,7 +441,7 @@ class Trainer:
 
     def infer(self, features, with_logits=True):
         self.initialize_iterators(inference_data=features)
-        fd = {self.mode_ph: 1, self.shuffle_val_ph: False}
+        fd = {self.mode_ph: 'infer'}
         prediction = self.model.prediction
         logits = self.model.logits
 
@@ -485,7 +486,7 @@ class Trainer:
                         self.metrics["val"]["f1"]["weighted"],
                         self.model.one_hot_prediction,
                     ],
-                    feed_dict={self.mode_ph: 1, self.shuffle_val_ph: True},
+                    feed_dict={self.mode_ph: 'val'},
                 )
                 self.one_hot_predictions.append(pred)
             except tf.errors.OutOfRangeError:
@@ -558,7 +559,7 @@ class Trainer:
                                     self.train_op,
                                     self.metrics["train"]["updates"],
                                 ],
-                                feed_dict={self.mode_ph: 0, self.shuffle_val_ph: True},
+                                feed_dict={self.mode_ph: 'train'},
                             )
                             self.hp.global_step = tf.train.global_step(
                                 self.sess, self.global_step_var
@@ -570,8 +571,7 @@ class Trainer:
                                     self.sess.run(
                                         self.summary_ops["train_metrics"],
                                         feed_dict={
-                                            self.mode_ph: 0,
-                                            self.shuffle_val_ph: True,
+                                            self.mode_ph: 'train'
                                         },
                                     ),
                                     self.hp.global_step,
