@@ -1,8 +1,7 @@
-import numpy as np
 import tensorflow as tf
 from tensorflow.python.client import device_lib
 
-from ..utils.tf_utils import bidirectional_rnn, task_specific_attention, get_graph_op
+from ..utils.tf_utils import bidirectional_rnn, task_specific_attention
 from .model import Model
 
 MultiRNNCell = tf.nn.rnn_cell.MultiRNNCell
@@ -12,7 +11,7 @@ class HAN(Model):
     def get_rnn_cell(self):
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
-        with tf.Session(config=config) as sess:
+        with tf.Session(config=config):
             local_device_protos = device_lib.list_local_devices()
             gpus = [x.name for x in local_device_protos if x.device_type == "GPU"]
         if gpus:
