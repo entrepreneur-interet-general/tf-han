@@ -135,7 +135,6 @@ class Trainer:
             )
             self.batch_size_ph = tf.placeholder(tf.int64, name="batch_size_ph")
             self.mode_ph = tf.placeholder(tf.string, name="mode_ph")
-            self.is_infering = tf.equal(self.mode_ph, "infer")
             self.model.mode_ph = self.mode_ph
             self.model.is_training = tf.equal(self.mode_ph, "train")
 
@@ -240,32 +239,6 @@ class Trainer:
         if not ask or "y" in input("Are you sure? (y/n)"):
             shutil.rmtree(self.hp.dir)
 
-    # def translate(self, batch):
-    #     docs = []
-    #     for d in batch:
-    #         sentences = []
-    #         for s in d:
-    #             if s.sum() > 0:
-    #                 sentences.append(
-    #                     [self.train_proc.reversed_vocab[w] for w in s if w > 0]
-    #                 )
-    #         docs.append(sentences)
-    #     return docs
-
-    # def display(self, batch, labels=None):
-    #     if labels is None:
-    #         labels = [None] * len(batch)
-    #     elif len(labels.shape) > 1:
-    #         labels = np.where(labels > 0)[1]
-    #     docs = self.translate(batch)
-    #     return "###\n\n".join(
-    #         [
-    #             "Rating: {}".format(labels[i])
-    #             + "\n".join([" ".join([w for w in s]) for s in d])
-    #             for i, d in enumerate(docs)
-    #         ]
-    #     )
-
     def make_iterators(self):
         with self.graph.as_default():
             with tf.variable_scope("datasets"):
@@ -296,9 +269,9 @@ class Trainer:
                     self.model.is_training,
                     self.train_iter.get_next,
                     lambda: tf.cond(
-                        self.is_infering,
-                        self.val_iter.get_next,
+                        tf.equal(self.mode_ph, "infer"),
                         self.infer_iter.get_next,
+                        self.val_iter.get_next
                     ),
                 )
 
@@ -307,10 +280,9 @@ class Trainer:
 
     def get_input_pair(self, is_val=False):
         self.initialize_iterators(is_val)
-        mode = 'val' if is_val else 'train'
+        mode = "val" if is_val else "train"
         return self.sess.run(
-            [self.input_tensor, self.labels_tensor],
-            feed_dict={self.mode_ph: mode},
+            [self.input_tensor, self.labels_tensor], feed_dict={self.mode_ph: mode}
         )
 
     def set_metrics(self):
@@ -441,7 +413,7 @@ class Trainer:
 
     def infer(self, features, with_logits=True):
         self.initialize_iterators(inference_data=features)
-        fd = {self.mode_ph: 'infer'}
+        fd = {self.mode_ph: "infer"}
         prediction = self.model.prediction
         logits = self.model.logits
 
@@ -486,7 +458,7 @@ class Trainer:
                         self.metrics["val"]["f1"]["weighted"],
                         self.model.one_hot_prediction,
                     ],
-                    feed_dict={self.mode_ph: 'val'},
+                    feed_dict={self.mode_ph: "val"},
                 )
                 self.one_hot_predictions.append(pred)
             except tf.errors.OutOfRangeError:
@@ -559,7 +531,7 @@ class Trainer:
                                     self.train_op,
                                     self.metrics["train"]["updates"],
                                 ],
-                                feed_dict={self.mode_ph: 'train'},
+                                feed_dict={self.mode_ph: "train"},
                             )
                             self.hp.global_step = tf.train.global_step(
                                 self.sess, self.global_step_var
@@ -570,9 +542,7 @@ class Trainer:
                                 self.train_writer.add_summary(
                                     self.sess.run(
                                         self.summary_ops["train_metrics"],
-                                        feed_dict={
-                                            self.mode_ph: 'train'
-                                        },
+                                        feed_dict={self.mode_ph: "train"},
                                     ),
                                     self.hp.global_step,
                                 )
