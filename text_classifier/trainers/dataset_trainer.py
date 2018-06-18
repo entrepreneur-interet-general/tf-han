@@ -6,10 +6,11 @@ from .trainer import Trainer
 
 
 class DST(Trainer):
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.padding_values = None
+        self.vocab = None
+        self.reversed_vocab = None
 
     def extract_words(self, token):
         # Split characters
@@ -140,11 +141,10 @@ class DST(Trainer):
                 self.sess.run(
                     self.infer_dataset_init_op,
                     feed_dict={
-                        self.mode_ph: 1,
+                        self.mode_ph: "infer",
                         self.features_data_ph: feats,
                         self.labels_data_ph: labs,
                         self.batch_size_ph: bs,
-                        self.shuffle_val_ph: False,
                     },
                 )
                 print("Iterator ready to infer")
@@ -152,8 +152,7 @@ class DST(Trainer):
                 self.sess.run(
                     self.val_dataset_init_op,
                     feed_dict={
-                        self.mode_ph: 1,
-                        self.shuffle_val_ph: True,
+                        self.mode_ph: "val",
                         self.batch_size_ph: self.hp.batch_size,
                     },
                 )
@@ -162,11 +161,38 @@ class DST(Trainer):
                 self.sess.run(
                     self.train_dataset_init_op,
                     feed_dict={
-                        self.mode_ph: 0,
+                        self.mode_ph: "train",
                         self.batch_size_ph: self.train_bs,
-                        self.shuffle_val_ph: True,
                     },
                 )
+
+    def lookup(self, features, vocab=None):
+        if not self.vocab:
+            if vocab:
+                print("Setting vocab")
+                self.vocab = vocab
+                self.reversed_vocab = {v: k for k, v in vocab.items()}
+            else:
+                print("Computing vocab")
+                self.vocab = {}
+                self.reversed_vocab = {}
+                with open(self.hp.train_words_file, "r") as f:
+                    for i, l in enumerate(f):
+                        w = l[:-1]  # strip final \n
+                        self.vocab[w] = i
+                        self.reversed_vocab[i] = w
+        data = []
+        for doc in features:
+            document = []
+            for sent in doc:
+                sentence = []
+                for word_index in sent:
+                    if word_index != 0:
+                        sentence.append(self.reversed_vocab[word_index])
+                if sentence:
+                    document.append(sentence)
+            data.append(document)
+        return data
 
 
 if __name__ == "__main__":
