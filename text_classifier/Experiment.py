@@ -160,6 +160,7 @@ class Experiment(object):
                 print("\n= = > Run", self.current_run)
             try:
                 metrics = self.trainer.train()
+                self.trainer.dump_logits()
                 self.update_metrics(metrics)
             except EndOfExperiment:
                 print("\nStopping experiment. Delete?")

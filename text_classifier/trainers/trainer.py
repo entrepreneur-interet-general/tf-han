@@ -110,6 +110,7 @@ class Trainer:
         self.weighted_f1 = None
         self.words = None
         self.y_pred = None
+        self.infered_logits = None
 
         self.metrics = {}
         self.summary_ops = {}
@@ -216,6 +217,14 @@ class Trainer:
 
         return trainer
 
+    def dump_logits(self):
+        if self.infered_logits is not None:
+            np.savetxt(
+                self.hp.dir / "inferred_logits.csv", self.infered_logits, delimiter=", "
+            )
+        else:
+            raise ValueError("No inferred logits")
+
     def initialize_uninitialized(self):
         with self.graph.as_default():
             global_vars = tf.global_variables()
@@ -271,7 +280,7 @@ class Trainer:
                     lambda: tf.cond(
                         tf.equal(self.mode_ph, "infer"),
                         self.infer_iter.get_next,
-                        self.val_iter.get_next
+                        self.val_iter.get_next,
                     ),
                 )
 
@@ -448,7 +457,7 @@ class Trainer:
         self.one_hot_predictions = []
         while True:
             try:
-                _, s, acc, mic, mac, wei, pred = self.sess.run(
+                _, s, acc, mic, mac, wei, pred, logs = self.sess.run(
                     [
                         self.metrics["val"]["updates"],
                         self.summary_ops["val_metrics"],
@@ -457,10 +466,12 @@ class Trainer:
                         self.metrics["val"]["f1"]["macro"],
                         self.metrics["val"]["f1"]["weighted"],
                         self.model.one_hot_prediction,
+                        self.model.logits,
                     ],
                     feed_dict={self.mode_ph: "val"},
                 )
                 self.one_hot_predictions.append(pred)
+                self.infered_logits = logs
             except tf.errors.OutOfRangeError:
                 break
 
