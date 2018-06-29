@@ -3,6 +3,7 @@ import tensorflow as tf
 
 from ..utils.tf_utils import one_hot_label, one_hot_multi_label
 from .trainer import Trainer
+from ..constants import oov_token
 
 
 class DST(Trainer):
@@ -181,6 +182,9 @@ class DST(Trainer):
                         w = l[:-1]  # strip final \n
                         self.vocab[w] = i
                         self.reversed_vocab[i] = w
+                m = max(list(self.reversed_vocab.keys()))
+                self.reversed_vocab[m + 1] = oov_token
+                self.vocab[oov_token] = m + 1
         data = []
         for doc in features:
             document = []
