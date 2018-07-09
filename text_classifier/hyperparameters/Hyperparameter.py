@@ -93,6 +93,7 @@ class HP(object):
         num_threads=4,
         pad_word=padding_token,
         restored=False,
+        restrict=-1,
         retrained=False,
         rnn_layers=6,
         save_steps=1000,
@@ -150,6 +151,7 @@ class HP(object):
         self.split_doc_token = split_doc_token
         self.default_name = default_name
         self.dtype = dtype
+        self.restrict = restrict
 
         self.vocab_size = None
         self.path_initialized = False
