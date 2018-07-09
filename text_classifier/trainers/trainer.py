@@ -380,12 +380,21 @@ class Trainer:
             )
 
             with tf.variable_scope("optimization"):
-                self.learning_rate = tf.train.exponential_decay(
-                    self.hp.learning_rate,
-                    self.global_step_var,
-                    self.hp.decay_steps,
-                    self.hp.decay_rate,
-                )
+
+                if int(self.hp.decay_rate) == 1:
+                    self.learning_rate = tf.get_variable(
+                        "learning_rate",
+                        shape=[],
+                        initializer=tf.constant_initializer(self.hp.learning_rate),
+                        trainable=False,
+                    )
+                else:
+                    self.learning_rate = tf.train.exponential_decay(
+                        self.hp.learning_rate,
+                        self.global_step_var,
+                        self.hp.decay_steps,
+                        self.hp.decay_rate,
+                    )
                 optimizer = tf.train.AdamOptimizer(self.learning_rate)
                 gradients = tf.gradients(self.model.loss, tf.trainable_variables())
                 clipped_gradients, _ = tf.clip_by_global_norm(
