@@ -516,15 +516,27 @@ class Trainer:
 
     def train(self, continue_training=False):
         """Main method: the training.
+
             * Prepares the Trainer
             * For each batch of each epoch:
-                * train
-                * get loss
-                * get global step
-                * write summary
-                * validate
-                * print status
+
+                - train
+                - get loss
+                - get global step
+                - write summary
+                - validate
+                - print status
+
+        continue_training (bool, optional): Defaults to False. 
+            Whether or not to initialize all variables or only the unititialized
+        
+        Raises:
+            EndOfExperiment: Signal that the Experiment should stop
+        
+        Returns:
+            tuple(float): metrics from the last validation
         """
+
         if self.hp.restored:
             self.hp.retrained = True
         self.train_start_time = time()
