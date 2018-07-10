@@ -8,6 +8,9 @@ import pandas as pd
 import yaml
 from munch import DefaultMunch
 
+from scipy.special import expit
+from sklearn.metrics import f1_score
+
 from .constants import metrics
 from .hyperparameters import HP
 from .trainers import DST
@@ -143,6 +146,30 @@ class Experiment(object):
         self.summary["metrics"]["macro_f1"].append(mac)
         self.summary["metrics"]["weighted_f1"].append(wei)
         self.summary["metrics"]["accuracy"].append(acc)
+
+    def get_samples(self, samples, sample_size, is_val=False):
+        preds, ys = None, None
+        for _ in range(samples):
+            x, y = self.trainer.get_input_pair(is_val, sample_size)
+            pred = self.trainer.infer(x)
+            if preds is None:
+                preds, ys = pred, y
+            else:
+                preds = np.concatenate((preds, pred), axis=0)
+                ys = np.concatenate((ys, y), axis=0)
+        return expit(preds), ys
+
+    def eval(self, thresholds, samples, sample_size, is_val=False):
+        preds, ys = self.get_samples(samples, sample_size, is_val)
+        averages = [None, "micro", "macro", "weighted"]
+        
+        metrics = {str(av): [] for av in averages}
+
+        for av in averages:
+            for threshold in thresholds:
+                metrics[str(av)].append(f1_score(ys, preds > threshold, average=av))
+        return metrics
+
 
     def run(self, n_runs=None, randomize=True, log=True, verbose=0):
         n_runs = n_runs or self.conf.n_runs
