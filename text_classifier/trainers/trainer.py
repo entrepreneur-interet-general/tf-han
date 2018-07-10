@@ -287,8 +287,8 @@ class Trainer:
     def make_datasets(self):
         raise NotImplementedError("Implement make_datasets")
 
-    def get_input_pair(self, is_val=False):
-        self.initialize_iterators(is_val)
+    def get_input_pair(self, is_val=False, batch_size=None):
+        self.initialize_iterators(is_val, batch_size=batch_size)
         mode = "val" if is_val else "train"
         return self.sess.run(
             [self.input_tensor, self.labels_tensor], feed_dict={self.mode_ph: mode}
@@ -411,7 +411,7 @@ class Trainer:
     def eval_tensor(self, tensor_name):
         return self.sess.run(self.graph.get_tensor_by_name(tensor_name))
 
-    def initialize_iterators(self, is_val=False, inference_data=None):
+    def initialize_iterators(self, is_val=False, inference_data=None, batch_size=None):
         """Initializes the train and validation iterators from
         the Processers' data
 
