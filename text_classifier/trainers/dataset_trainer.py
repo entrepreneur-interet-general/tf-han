@@ -63,7 +63,9 @@ class DST(Trainer):
                         )
                         self.train_dataset = tf.data.Dataset.zip((dds, lds))
                         if self.hp.restrict > 0:
-                            self.train_dataset = self.train_dataset.take(int(self.hp.restrict))
+                            self.train_dataset = self.train_dataset.take(
+                                int(self.hp.restrict)
+                            )
                         self.train_dataset = self.train_dataset.shuffle(
                             10000, reshuffle_each_iteration=True
                         )
