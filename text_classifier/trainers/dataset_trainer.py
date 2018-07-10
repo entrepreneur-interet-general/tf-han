@@ -131,7 +131,7 @@ class DST(Trainer):
         print("OK.")
         self.prepared = True
 
-    def initialize_iterators(self, is_val=False, inference_data=None):
+    def initialize_iterators(self, is_val=False, inference_data=None, batch_size=None):
         """Initializes the train and validation iterators from
         the Processers' data
 
@@ -142,7 +142,7 @@ class DST(Trainer):
             if inference_data is not None:
                 feats = inference_data
                 labs = np.zeros((len(feats), self.hp.num_classes))
-                bs = len(feats)
+                bs = batch_size or len(feats)
                 self.sess.run(
                     self.infer_dataset_init_op,
                     feed_dict={
@@ -158,7 +158,7 @@ class DST(Trainer):
                     self.val_dataset_init_op,
                     feed_dict={
                         self.mode_ph: "val",
-                        self.batch_size_ph: self.hp.batch_size,
+                        self.batch_size_ph: batch_size or self.hp.batch_size,
                     },
                 )
             else:
@@ -167,7 +167,7 @@ class DST(Trainer):
                     self.train_dataset_init_op,
                     feed_dict={
                         self.mode_ph: "train",
-                        self.batch_size_ph: self.train_bs,
+                        self.batch_size_ph: batch_size or self.train_bs,
                     },
                 )
 
