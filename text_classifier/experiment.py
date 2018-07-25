@@ -162,14 +162,13 @@ class Experiment(object):
     def eval(self, thresholds, samples, sample_size, is_val=False):
         preds, ys = self.get_samples(samples, sample_size, is_val)
         averages = [None, "micro", "macro", "weighted"]
-        
+
         metrics = {str(av): [] for av in averages}
 
         for av in averages:
             for threshold in thresholds:
                 metrics[str(av)].append(f1_score(ys, preds > threshold, average=av))
         return metrics
-
 
     def run(self, n_runs=None, randomize=True, log=True, verbose=0):
         n_runs = n_runs or self.conf.n_runs
@@ -189,6 +188,7 @@ class Experiment(object):
                 metrics = self.trainer.train()
                 self.trainer.dump_logits()
                 self.update_metrics(metrics)
+                self.summarize()
             except EndOfExperiment:
                 print("\nStopping experiment. Delete?")
                 answer = input("y/n")
