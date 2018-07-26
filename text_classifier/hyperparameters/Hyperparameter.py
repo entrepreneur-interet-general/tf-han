@@ -83,6 +83,8 @@ class HP(object):
         embedding_file="",
         embedding_dim=100,
         epochs=20,
+        fast_text=False,
+        fast_text_model_file=None,
         global_step=0,
         learning_rate=5e-3,
         max_grad_norm=5.0,
@@ -152,10 +154,13 @@ class HP(object):
         self.default_name = default_name
         self.dtype = dtype
         self.restrict = restrict
+        self.fast_text = fast_text
+        self.fast_text_model_file = fast_text_model_file
 
         self.vocab_size = None
         self.path_initialized = False
         self.id = None
+
 
     def __str__(self):
         """Returns a string representation of the Hyperparameter:

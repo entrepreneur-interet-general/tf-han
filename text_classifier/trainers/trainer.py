@@ -274,15 +274,17 @@ class Trainer:
                     self.infer_dataset_init_op = self.infer_iter.make_initializer(
                         self.infer_dataset, name="infer_dataset_init_op"
                     )
-                self.input_tensor, self.labels_tensor = tf.cond(
-                    self.model.is_training,
-                    self.train_iter.get_next,
-                    lambda: tf.cond(
-                        tf.equal(self.mode_ph, "infer"),
-                        self.infer_iter.get_next,
-                        self.val_iter.get_next,
-                    ),
-                )
+
+    def set_input_tensors(self):
+        self.input_tensor, self.labels_tensor = tf.cond(
+            self.model.is_training,
+            self.train_iter.get_next,
+            lambda: tf.cond(
+                tf.equal(self.mode_ph, "infer"),
+                self.infer_iter.get_next,
+                self.val_iter.get_next,
+            ),
+        )
 
     def make_datasets(self):
         raise NotImplementedError("Implement make_datasets")

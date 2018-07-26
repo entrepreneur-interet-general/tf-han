@@ -61,16 +61,28 @@ class HAN(Model):
             )
 
         with tf.variable_scope("set-lengths"):
-            self.doc_lengths = tf.count_nonzero(
-                tf.reduce_sum(self.input_tensor, axis=-1), axis=-1
-            )
-            self.sentence_lengths = tf.count_nonzero(self.input_tensor, axis=-1)
+            if self.hp.fast_text:
+                self.doc_lengths = tf.count_nonzero(
+                    tf.reduce_sum(tf.reduce_sum(self.input_tensor, axis=-1), axis=-1),
+                    axis=-1,
+                )
+                self.sentence_lengths = tf.count_nonzero(
+                    tf.reduce_sum(self.input_tensor, axis=-1), axis=-1
+                )
+            else:
+                self.doc_lengths = tf.count_nonzero(
+                    tf.reduce_sum(self.input_tensor, axis=-1), axis=-1
+                )
+                self.sentence_lengths = tf.count_nonzero(self.input_tensor, axis=-1)
 
         with tf.variable_scope("sentence-level"):
             with tf.variable_scope("embedding-lookup"):
-                self.embedded_inputs = tf.nn.embedding_lookup(
-                    self.embedding_matrix, self.input_tensor
-                )
+                if self.hp.fast_text:
+                    self.embedded_inputs = self.input_tensor
+                else:
+                    self.embedded_inputs = tf.nn.embedding_lookup(
+                        self.embedding_matrix, self.input_tensor
+                    )
 
             with tf.variable_scope("reshape"):
                 self.embedded_sentences = tf.reshape(

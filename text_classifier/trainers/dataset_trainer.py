@@ -124,6 +124,7 @@ class DST(Trainer):
         print("Ok. Setting Datasets...")
         self.make_datasets()
         self.make_iterators()
+        self.set_input_tensors()
         print("Ok. Building graph...")
         self.build()
         print("Ok. Saving hp...")
