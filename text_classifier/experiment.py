@@ -72,6 +72,8 @@ class Experiment(object):
         params = conf.randomizable_params
 
         for p_name, p in params.items():
+            if self.conf.trainer_type == "FT_DST" and p_name == "embedding_dim":
+                continue
             if p.type == "range":
                 values = np.arange(p.min, p.max, p.step)
             elif p.type == "list":
@@ -129,15 +131,16 @@ class Experiment(object):
         if self.conf.trainer_type == "FT_DST":
             hp = HP(base_dir=self.dir)
             for attr, val in self.conf.hyperparameter.items():
-                if val is not None:
-                    setattr(hp, attr, val)
+                if attr != "embedding_dim":
+                    if val is not None:
+                        setattr(hp, attr, val)
             if not self.fast_text_model:
                 print("Setting fast_text_model...", end="")
                 self.fast_text_model = FastText.load_fasttext_format(
                     hp.fast_text_model_file
                 )
-                print('Ok.')
-            self.trainer = FT_DST(fast_text_model=fast_text_model, hp=hp)
+                print("Ok.")
+            self.trainer = FT_DST(fast_text_model=self.fast_text_model, hp=hp)
         else:
             raise ValueError("Unknown Trainer")
 

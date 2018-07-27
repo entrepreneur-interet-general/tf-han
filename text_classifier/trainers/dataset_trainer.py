@@ -4,6 +4,7 @@ import tensorflow as tf
 from ..utils.tf_utils import one_hot_label, one_hot_multi_label
 from .trainer import Trainer
 from ..constants import oov_token
+from ..hyperparameters import HP
 
 
 class DST(Trainer):
@@ -34,6 +35,12 @@ class DST(Trainer):
             label_ds = label_ds.map(one_hot_label, self.hp.num_threads)
         return doc_ds, label_ds
 
+    def set_padding_values(self):
+        if self.hp.dtype == 32:
+            self.padding_values = (np.int64(0), np.int32(0))
+        else:
+            self.padding_values = (np.int64(0), np.int64(0))
+
     def make_datasets(self):
         with self.graph.as_default():
             with tf.device("/cpu:0"):
@@ -42,10 +49,7 @@ class DST(Trainer):
                         tf.TensorShape([None, None]),
                         tf.TensorShape([None]),
                     )
-                    if self.hp.dtype == 32:
-                        self.padding_values = (np.int64(0), np.int32(0))
-                    else:
-                        self.padding_values = (np.int64(0), np.int64(0))
+                    self.set_padding_values()
 
                     with tf.variable_scope("vocab-lookup"):
                         self.words = tf.contrib.lookup.index_table_from_file(
@@ -89,21 +93,24 @@ class DST(Trainer):
                         self.val_dataset = self.val_dataset.prefetch(10)
 
                     with tf.variable_scope("infer"):
-                        self.features_data_ph = tf.placeholder(
-                            tf.int64, [None, None, None], "features_data_ph"
-                        )
-                        if self.hp.dtype == 32:
-                            self.labels_data_ph = tf.placeholder(
-                                tf.int32, [None, self.hp.num_classes], "labels_data_ph"
-                            )
-                        else:
-                            self.labels_data_ph = tf.placeholder(
-                                tf.int64, [None, self.hp.num_classes], "labels_data_ph"
-                            )
+                        self.set_infer_placehoders()
                         infer_dataset = tf.data.Dataset.from_tensor_slices(
                             (self.features_data_ph, self.labels_data_ph)
                         )
                         self.infer_dataset = infer_dataset.batch(self.batch_size_ph)
+
+    def set_infer_placehoders(self):
+        self.features_data_ph = tf.placeholder(
+            tf.int64, [None, None, None], "features_data_ph"
+        )
+        if self.hp.dtype == 32:
+            self.labels_data_ph = tf.placeholder(
+                tf.int32, [None, self.hp.num_classes], "labels_data_ph"
+            )
+        else:
+            self.labels_data_ph = tf.placeholder(
+                tf.int64, [None, self.hp.num_classes], "labels_data_ph"
+            )
 
     def prepare(self):
         """Runs all steps necessary before training can start:

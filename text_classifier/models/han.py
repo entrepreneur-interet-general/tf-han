@@ -53,11 +53,14 @@ class HAN(Model):
         self.embedding_words = None
         self.doc_lengths = None
         self.is_training = None
+        self._original_input = None
 
     def set_logits(self):
         with tf.variable_scope("unstack-lengths"):
             (self.batch, self.docs, self.sents) = tf.unstack(
-                tf.shape(self.input_tensor)
+                tf.shape(
+                    self.input_tensor if not self.hp.fast_text else self._original_input
+                )
             )
 
         with tf.variable_scope("set-lengths"):

@@ -9,7 +9,7 @@ experiments_dir: /Users/victor/Documents/Tracfin/dev/han/experiments/
 exp_id: null
 
 # Only type of Trainer is DST so far
-trainer_type: DST
+trainer_type: FT_DST
 
 # Number of runs to performs <=> number of points in the hyperparameter space to sample
 # If `n_runs: null` then `n_runs` will be np.iinfo(int).max = 2^63 - 1 = 9223372036854775807
@@ -36,6 +36,7 @@ hyperparameter:
     val_labels_file: /Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/sample_0001_val_01/labels.txt
     multilabel: false
     num_classes: 5
+    fast_text_model_file: /Users/victor/Documents/Tracfin/dev/han/data/embeddings/cc.fr.300.bin
 
 randomizable_params:
     # * type: 
