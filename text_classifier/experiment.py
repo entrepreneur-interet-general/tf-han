@@ -2,6 +2,7 @@ import datetime
 import shutil
 import sys
 from pathlib import Path
+from gensim.models.wrappers import FastText
 
 import numpy as np
 import pandas as pd
@@ -13,7 +14,7 @@ from sklearn.metrics import f1_score
 
 from .constants import metrics
 from .hyperparameters import HP
-from .trainers import DST
+from .trainers import DST, FT_DST
 from .utils import default_conf
 from .utils.utils import (
     EndOfExperiment,
@@ -33,6 +34,8 @@ class Experiment(object):
         self.trainer = None
         self.tee = None
         self.current_run = 0
+
+        self.fast_text_model = None
 
         if self.conf_path:
             self.set_conf(self.conf_path)
@@ -123,6 +126,18 @@ class Experiment(object):
                 if val is not None:
                     setattr(hp, attr, val)
             self.trainer = DST(hp=hp)
+        if self.conf.trainer_type == "FT_DST":
+            hp = HP(base_dir=self.dir)
+            for attr, val in self.conf.hyperparameter.items():
+                if val is not None:
+                    setattr(hp, attr, val)
+            if not self.fast_text_model:
+                print("Setting fast_text_model...", end="")
+                self.fast_text_model = FastText.load_fasttext_format(
+                    hp.fast_text_model_file
+                )
+                print('Ok.')
+            self.trainer = FT_DST(fast_text_model=fast_text_model, hp=hp)
         else:
             raise ValueError("Unknown Trainer")
 
