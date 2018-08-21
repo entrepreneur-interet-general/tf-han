@@ -73,6 +73,7 @@ class Experiment(object):
 
         for p_name, p in params.items():
             if self.conf.trainer_type == "FT_DST" and p_name == "embedding_dim":
+                self.summary["params"][p_name].append(300)
                 continue
             if p.type == "range":
                 values = np.arange(p.min, p.max, p.step)
