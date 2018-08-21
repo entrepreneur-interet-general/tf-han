@@ -115,15 +115,16 @@ class Trainer:
         self.metrics = {}
         self.summary_ops = {}
 
+        if not restored:
+            self.set_placeholders()
+
         if self.model_type == "HAN":
-            self.model = HAN(self.hp, self.graph)
+            self.model = HAN(self.hp, self.is_training, self.graph)
+
         elif self.model_type == "reuse" and model:
             self.model = model
         else:
             raise ValueError("Invalid model")
-
-        if not restored:
-            self.set_placeholders()
 
     def set_placeholders(self):
         with self.graph.as_default():
@@ -136,8 +137,7 @@ class Trainer:
             )
             self.batch_size_ph = tf.placeholder(tf.int64, name="batch_size_ph")
             self.mode_ph = tf.placeholder(tf.string, name="mode_ph")
-            self.model.mode_ph = self.mode_ph
-            self.model.is_training = tf.equal(self.mode_ph, "train")
+            self.is_training = tf.equal(self.mode_ph, "train")
 
     def save(self, path=None, simple_save=True, ckpt_save=True):
         with self.graph.as_default():
@@ -223,7 +223,7 @@ class Trainer:
                 self.hp.dir / "inferred_logits.csv", self.infered_logits, delimiter=", "
             )
         else:
-            raise ValueError("No inferred logits")
+            open(self.hp.dir / "no_inferred_logits.txt", "a").close()
 
     def initialize_uninitialized(self):
         with self.graph.as_default():
@@ -344,6 +344,11 @@ class Trainer:
             tf.summary.scalar(
                 "learning_rate", self.learning_rate, collections=["training"]
             )
+            tf.summary.scalar("global_grad_norm", global_norm, collections=["training"])
+            for g, v in grads_and_vars:
+                tf.summary.histogram(v.name, v, collections=["training"])
+                tf.summary.histogram(v.name + '_grad', g, collections=["training"])
+
             self.summary_ops["training"] = tf.summary.merge_all(key="training")
             self.summary_ops["val_metrics"] = tf.summary.merge_all(key="val_metrics")
             self.summary_ops["train_metrics"] = tf.summary.merge_all(
@@ -398,13 +403,17 @@ class Trainer:
                         self.hp.decay_rate,
                     )
                 optimizer = tf.train.AdamOptimizer(self.learning_rate)
+
                 gradients = tf.gradients(self.model.loss, tf.trainable_variables())
-                clipped_gradients, _ = tf.clip_by_global_norm(
+
+                clipped_gradients, self.global_norm = tf.clip_by_global_norm(
                     gradients, self.hp.max_grad_norm
                 )
-                grads_and_vars = tuple(zip(clipped_gradients, tf.trainable_variables()))
+
+                self.grads_and_vars = zip(clipped_gradients)
+
                 self.train_op = optimizer.apply_gradients(
-                    grads_and_vars, global_step=self.global_step_var
+                    self.grads_and_vars, global_step=self.global_step_var
                 )
 
             self.set_metrics()
@@ -623,3 +632,4 @@ class Trainer:
                             return metrics
                     except KeyboardInterrupt:
                         raise EndOfExperiment("Stopping Experiment")
+

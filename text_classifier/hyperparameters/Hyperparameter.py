@@ -78,6 +78,7 @@ class HP(object):
         decay_steps=10,
         decay_rate=0.99,
         default_name="trainer",
+        dense_layers=[128, 128],
         dropout=0.6,
         dtype=32,
         embedding_file="",
@@ -102,6 +103,7 @@ class HP(object):
         split_doc_token=split_doc_token,
         summary_secs=1000,
         trainable_embedding_matrix=True,
+        use_bnlstm=True,
         val_batch_size=1000,
         val_every_steps=100,
         version="v2",
@@ -156,11 +158,12 @@ class HP(object):
         self.restrict = restrict
         self.fast_text = fast_text
         self.fast_text_model_file = fast_text_model_file
+        self.use_bnlstm = use_bnlstm
+        self.dense_layers = dense_layers
 
         self.vocab_size = None
         self.path_initialized = False
         self.id = None
-
 
     def __str__(self):
         """Returns a string representation of the Hyperparameter:

@@ -3,12 +3,15 @@ from tensorflow.python.client import device_lib
 
 from ..utils.tf_utils import bidirectional_rnn, task_specific_attention
 from .model import Model
+from ..utils.custom_layer import BNLSTMCell
 
 MultiRNNCell = tf.nn.rnn_cell.MultiRNNCell
 
 
 class HAN(Model):
-    def get_rnn_cell(self):
+    def get_rnn_cell(self, is_training_ph):
+        if is_training_ph is not None and self.hp.use_bnlstm:
+            return BNLSTMCell(self.hp.cell_size, is_training_ph)
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
         with tf.Session(config=config):
@@ -18,7 +21,7 @@ class HAN(Model):
             return tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(self.hp.cell_size)
         return tf.nn.rnn_cell.GRUCell(self.hp.cell_size)
 
-    def __init__(self, hp, graph=None):
+    def __init__(self, hp, is_training, graph=None):
         super().__init__(hp, graph)
         self.np_embedding_matrix = None
         self.embedding_matrix = None
@@ -26,17 +29,19 @@ class HAN(Model):
         self.docs = None
         self.sents = None
         self.sent_cell_fw = MultiRNNCell(
-            [self.get_rnn_cell() for _ in range(self.hp.rnn_layers)]
+            [self.get_rnn_cell(is_training) for _ in range(self.hp.rnn_layers)]
         )
         self.sent_cell_bw = MultiRNNCell(
-            [self.get_rnn_cell() for _ in range(self.hp.rnn_layers)]
+            [self.get_rnn_cell(is_training) for _ in range(self.hp.rnn_layers)]
         )
         self.doc_cell_fw = MultiRNNCell(
-            [self.get_rnn_cell() for _ in range(self.hp.rnn_layers)]
+            [self.get_rnn_cell(is_training) for _ in range(self.hp.rnn_layers)]
         )
         self.doc_cell_bw = MultiRNNCell(
-            [self.get_rnn_cell() for _ in range(self.hp.rnn_layers)]
+            [self.get_rnn_cell(is_training) for _ in range(self.hp.rnn_layers)]
         )
+        self.is_training = is_training
+
         self.val_ph = None
         self.embedded_inputs = None
         self.embedded_sentences = None
@@ -52,7 +57,6 @@ class HAN(Model):
         self.prediction = None
         self.embedding_words = None
         self.doc_lengths = None
-        self.is_training = None
         self._original_input = None
 
     def set_logits(self):
@@ -146,14 +150,19 @@ class HAN(Model):
                 )
 
         with tf.variable_scope("classifier"):
-            self.logits = tf.layers.dense(
-                self.doc_output, self.hp.num_classes, activation=None
-            )
+            self.logits = self.doc_output
+            for l in self.hp.dense_layers:
+                self.logits = tf.layers.dense(self.logits, l, activation=tf.nn.selu)
+
+            with tf.variable_scope("logits"):
+                self.logits = tf.layers.dense(
+                    self.logits, self.hp.num_classes, activation=None
+                )
 
             k_name = [
                 n.name
                 for n in tf.get_default_graph().as_graph_def().node
-                if "classifier" in n.name
+                if "logits" in n.name
                 and "kernel" in n.name
                 and not n.name.split("kernel")[-1]
             ][0]
@@ -161,7 +170,7 @@ class HAN(Model):
             b_name = [
                 n.name
                 for n in tf.get_default_graph().as_graph_def().node
-                if "classifier" in n.name
+                if "logits" in n.name
                 and "bias" in n.name
                 and not n.name.split("bias")[-1]
             ][0]
