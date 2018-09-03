@@ -1,16 +1,19 @@
 import json
 import shutil
+import threading
 from pathlib import Path
 from time import time
 
 import numpy as np
 import tensorflow as tf
+from scipy.special import expit
 from tensorflow.python.saved_model import tag_constants  # pylint: disable=E0611
 
 from ..hyperparameters import HP
 from ..models import HAN
 from ..utils.tf_utils import streaming_f1
-from ..utils.utils import EndOfExperiment
+from ..utils.utils import EndOfExperiment, thread_eval
+from .base_trainer import BaseTrainer
 
 
 def strtime(ref):
@@ -29,7 +32,7 @@ def strtime(ref):
     return "{:2}:{:2}:{:2}".format(h, m, s).replace(" ", "0")
 
 
-class Trainer:
+class Trainer(BaseTrainer):
     def __init__(
         self,
         model_type=None,
@@ -111,6 +114,7 @@ class Trainer:
         self.words = None
         self.y_pred = None
         self.infered_logits = None
+        self.infered_labels = None
 
         self.metrics = {}
         self.summary_ops = {}
@@ -120,7 +124,6 @@ class Trainer:
 
         if self.model_type == "HAN":
             self.model = HAN(self.hp, self.is_training, self.graph)
-
         elif self.model_type == "reuse" and model:
             self.model = model
         else:
@@ -217,13 +220,36 @@ class Trainer:
 
         return trainer
 
-    def dump_logits(self):
+    def dump_logits(self, step=None, eval=True):
+        step_string = "_{}".format(step if step is not None else "final")
+
         if self.infered_logits is not None:
-            np.savetxt(
-                self.hp.dir / "inferred_logits.csv", self.infered_logits, delimiter=", "
+            np.save(
+                self.hp.dir / "inferred_logits{}.npy".format(step_string),
+                self.infered_logits,
+            )
+            np.save(
+                self.hp.dir / "infered_labels{}.npy".format(step_string),
+                self.infered_labels,
             )
         else:
             open(self.hp.dir / "no_inferred_logits.txt", "a").close()
+        if eval:
+            preds = expit(self.infered_logits)
+            ys = self.infered_labels
+
+        thread = threading.Thread(
+            target=thread_eval,
+            args=(
+                ys,
+                preds,
+                self.hp.dir,
+                step,
+                self.hp.ref_labels,
+                self.hp.ref_labels_delimiter,
+            ),
+        )
+        thread.start()
 
     def initialize_uninitialized(self):
         with self.graph.as_default():
@@ -344,10 +370,12 @@ class Trainer:
             tf.summary.scalar(
                 "learning_rate", self.learning_rate, collections=["training"]
             )
-            tf.summary.scalar("global_grad_norm", global_norm, collections=["training"])
-            for g, v in grads_and_vars:
+            tf.summary.scalar(
+                "global_grad_norm", self.global_norm, collections=["training"]
+            )
+            for g, v in self.grads_and_vars:
                 tf.summary.histogram(v.name, v, collections=["training"])
-                tf.summary.histogram(v.name + '_grad', g, collections=["training"])
+                tf.summary.histogram(v.name + "_grad", g, collections=["training"])
 
             self.summary_ops["training"] = tf.summary.merge_all(key="training")
             self.summary_ops["val_metrics"] = tf.summary.merge_all(key="val_metrics")
@@ -404,16 +432,18 @@ class Trainer:
                     )
                 optimizer = tf.train.AdamOptimizer(self.learning_rate)
 
-                gradients = tf.gradients(self.model.loss, tf.trainable_variables())
+                gradients, variables = zip(
+                    *optimizer.compute_gradients(self.model.loss)
+                )
+
+                self.grads_and_vars = zip(gradients, variables)
 
                 clipped_gradients, self.global_norm = tf.clip_by_global_norm(
                     gradients, self.hp.max_grad_norm
                 )
 
-                self.grads_and_vars = zip(clipped_gradients)
-
                 self.train_op = optimizer.apply_gradients(
-                    self.grads_and_vars, global_step=self.global_step_var
+                    zip(clipped_gradients, variables), global_step=self.global_step_var
                 )
 
             self.set_metrics()
@@ -460,11 +490,15 @@ class Trainer:
         Returns:
             str: Information to print
         """
-        # Validate every n examples so every n/batch_size batchs
 
+        # Validate every n batchs
         if self.hp.global_step == 0:
             # don't validate on first step eventhough
             # self.hp.global_step% val_every_steps == 0
+            return None
+
+        if (not force) and self.hp.val_every_steps <= 0:
+            # val_every_steps = -1 -> val at epoch ends only
             return None
 
         if (not force) and self.hp.global_step % self.hp.val_every_steps != 0:
@@ -472,12 +506,14 @@ class Trainer:
             # self.hp.global_step% val_every_steps != 0
             return None
 
-        self.initialize_iterators(is_val=True)
+        self.initialize_iterators(is_val=True, batch_size=self.hp.val_batch_size)
         self.reset_metrics("val")
         self.one_hot_predictions = []
+        self.infered_logits = []
+        self.infered_labels = []
         while True:
             try:
-                _, s, acc, mic, mac, wei, pred, logs = self.sess.run(
+                _, s, acc, mic, mac, wei, pred, logs, ys = self.sess.run(
                     [
                         self.metrics["val"]["updates"],
                         self.summary_ops["val_metrics"],
@@ -487,28 +523,33 @@ class Trainer:
                         self.metrics["val"]["f1"]["weighted"],
                         self.model.one_hot_prediction,
                         self.model.logits,
+                        self.labels_tensor,
                     ],
                     feed_dict={self.mode_ph: "val"},
                 )
                 self.one_hot_predictions.append(pred)
-                self.infered_logits = logs
+                self.infered_logits.append(logs)
+                self.infered_labels.append(ys)
             except tf.errors.OutOfRangeError:
                 break
-
+        self.infered_logits = np.vstack(self.infered_logits)
+        self.infered_labels = np.vstack(self.infered_labels)
         self.val_writer.add_summary(s, self.hp.global_step)
         self.val_writer.flush()
         self.train_writer.flush()
+        preds = np.sum([_.sum(axis=0) for _ in self.one_hot_predictions], axis=0)
+        print("\n", preds)
 
-        print("\n", np.sum([_.sum(axis=0) for _ in self.one_hot_predictions], axis=0))
+        non_zeros = np.count_nonzero(preds)
 
-        return acc, mic, mac, wei
+        return non_zeros, acc, mic, mac, wei
 
     def epoch_string(self, epoch, loss, lr, metrics):
         val_string = ""
         if metrics is not None:
             acc, mic, mac, wei = metrics
             val_string = " | Validation metrics: "
-            val_string += "Acc {:.4f} Mi {:.4f} Ma {:.4f} We {:.4f}\n".format(
+            val_string += "Acc {:.4f} Mi {:.4f} Ma {:.4f} We {:.4f}".format(
                 acc, mic, mac, wei
             )
         epoch_string = "[{}] EPOCH {:2} / {:2} | "
@@ -566,6 +607,7 @@ class Trainer:
                     stop = False
                     while not stop:
                         try:
+                            force = False
                             loss, lr, summary, _, _ = self.sess.run(
                                 [
                                     self.model.loss,
@@ -592,12 +634,23 @@ class Trainer:
                                 self.train_writer.flush()
                                 self.reset_metrics("train")
 
-                            metrics = self.validate()
-
                         except tf.errors.OutOfRangeError:
                             stop = True
-                        finally:
-                            print(self.epoch_string(epoch, loss, lr, metrics), end="\r")
+                            force = self.hp.val_every_steps <= 0
+
+                        val = self.validate(force)
+
+                        if val is not None:
+                            non_zeros, *metrics = val
+                            self.dump_logits(self.hp.global_step)
+                        else:
+                            metrics = None
+                        if self.hp.stop_learning:
+                            if epoch + 1 == self.hp.stop_learning_epoch:
+                                if non_zeros < self.hp.stop_learning_count:
+                                    self.save()
+                                    return metrics
+                        print(self.epoch_string(epoch, loss, lr, metrics), end="\r")
 
                 # End of epochs
                 if self.hp.global_step % self.hp.val_every_steps != 0:
@@ -632,4 +685,3 @@ class Trainer:
                             return metrics
                     except KeyboardInterrupt:
                         raise EndOfExperiment("Stopping Experiment")
-

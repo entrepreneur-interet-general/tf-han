@@ -150,13 +150,27 @@ class HAN(Model):
                 )
 
         with tf.variable_scope("classifier"):
+            try:
+                activation = getattr(tf.nn, self.hp.dense_activation)
+            except AttributeError:
+                activation = tf.nn.selu
             self.logits = self.doc_output
             for l in self.hp.dense_layers:
-                self.logits = tf.layers.dense(self.logits, l, activation=tf.nn.selu)
+                self.logits = tf.layers.dense(
+                    self.logits,
+                    l,
+                    activation=activation,
+                    bias_initializer=tf.contrib.layers.xavier_initializer,
+                    kernel_initializer=tf.contrib.layers.xavier_initializer,
+                )
 
             with tf.variable_scope("logits"):
                 self.logits = tf.layers.dense(
-                    self.logits, self.hp.num_classes, activation=None
+                    self.logits,
+                    self.hp.num_classes,
+                    activation=None,
+                    bias_initializer=tf.contrib.layers.xavier_initializer,
+                    kernel_initializer=tf.contrib.layers.xavier_initializer,
                 )
 
             k_name = [

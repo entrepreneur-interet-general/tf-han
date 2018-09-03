@@ -73,6 +73,9 @@ class DST(Trainer):
                         self.train_dataset = self.train_dataset.shuffle(
                             10000, reshuffle_each_iteration=True
                         )
+                        self.train_dataset = self.train_dataset.take(
+                            self.hp.max_train_size
+                        )
                         self.train_dataset = self.train_dataset.padded_batch(
                             self.batch_size_ph, padded_shapes, self.padding_values
                         )
@@ -87,6 +90,7 @@ class DST(Trainer):
                         self.val_dataset = self.val_dataset.shuffle(
                             10000, reshuffle_each_iteration=True
                         )
+                        self.val_dataset = self.val_dataset.take(self.hp.max_val_size)
                         self.val_dataset = self.val_dataset.padded_batch(
                             self.batch_size_ph, padded_shapes, self.padding_values
                         )

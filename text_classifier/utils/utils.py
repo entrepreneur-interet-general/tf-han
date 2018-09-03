@@ -1,10 +1,17 @@
+import json
 import sys
 from importlib import reload
 from pathlib import Path
 from random import normalvariate
 from types import ModuleType
 
+import matplotlib
+
+matplotlib.use("Agg")
+
+import matplotlib.pyplot as plt
 import numpy as np
+from sklearn.metrics import f1_score
 
 
 def _reload(module, top_level_name):
@@ -159,3 +166,60 @@ class Tee:
         """Reset stdout to default
         """
         sys.stdout = self.stdout
+
+
+def thread_eval(ys, preds, directory, step, ref_labels, ref_labels_delimiter):
+    step_string = "_{}".format(step if step is not None else "final")
+    directory = Path(directory) / "step-{}".format(step)
+    if not directory.exists():
+        directory.mkdir(parents=True)
+
+    thresholds = np.arange(0.1, 0.9, 0.05)
+    averages = [None, "micro", "macro", "weighted"]
+
+    metrics = {str(av): [] for av in averages}
+
+    for av in averages:
+        for threshold in thresholds:
+            metrics[str(av)].append(
+                np.array(f1_score(ys, preds > threshold, average=av)).tolist()
+            )
+    with open(directory / "logits_metrics{}.npy".format(step_string), "w") as f:
+        json.dump(metrics, f)
+
+    fig = plt.figure()
+    st = fig.suptitle(
+        "F1 scores - {}".format(
+            "step {}".format(step) if step is not None else "final"
+        ),
+        fontsize="x-large",
+    )
+    for i, av in enumerate(averages[1:]):
+        ax = fig.add_subplot("22{}".format(i + 1))
+        ax.plot(thresholds, metrics[av])
+        ax.set_title(av)
+    st.set_y(0.95)
+    fig.subplots_adjust(top=0.85)
+    fig.savefig(directory / "logits_metrics{}.png".format(step_string), dpi=360)
+
+    labels = {}
+    with open(ref_labels, "r") as f:
+        for l in f:
+            l = l.strip()
+            v, k = l.split(ref_labels_delimiter)
+            labels[int(k)] = v
+    x = np.arange(len(metrics["None"][0]))
+    for met, threshold in zip(metrics["None"], thresholds):
+        indexes = np.argsort(met)
+        mets = np.sort(met)
+        plt.figure(figsize=(12, 8))
+        plt.suptitle("F1-score per class at threshold {:3f}".format(threshold))
+        plt.bar(x, mets)
+        plt.xticks(x, [labels[k] for k in indexes], rotation="vertical")
+        plt.tight_layout()
+        plt.savefig(
+            directory
+            / "logits_metrics_perclass_{:.3f}{}.png".format(threshold, step_string),
+            dpi=360,
+        )
+        plt.close()

@@ -129,7 +129,7 @@ class Experiment(object):
                 if val is not None:
                     setattr(hp, attr, val)
             self.trainer = DST(hp=hp)
-        if self.conf.trainer_type == "FT_DST":
+        elif self.conf.trainer_type == "FT_DST":
             hp = HP(base_dir=self.dir)
             for attr, val in self.conf.hyperparameter.items():
                 if attr != "embedding_dim":
