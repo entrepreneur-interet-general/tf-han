@@ -58,8 +58,9 @@ class HAN(Model):
         self.embedding_words = None
         self.doc_lengths = None
         self._original_input = None
+        self.word_output = None
 
-    def set_logits(self):
+    def _unstack_lengths(self):
         with tf.variable_scope("unstack-lengths"):
             (self.batch, self.docs, self.sents) = tf.unstack(
                 tf.shape(
@@ -67,6 +68,8 @@ class HAN(Model):
                 )
             )
 
+    def set_lengths(self):
+        self._unstack_lengths()
         with tf.variable_scope("set-lengths"):
             if self.hp.fast_text:
                 self.doc_lengths = tf.count_nonzero(
@@ -82,10 +85,13 @@ class HAN(Model):
                 )
                 self.sentence_lengths = tf.count_nonzero(self.input_tensor, axis=-1)
 
+    def set_sentence_level(self):
         with tf.variable_scope("sentence-level"):
             with tf.variable_scope("embedding-lookup"):
                 if self.hp.fast_text:
                     self.embedded_inputs = self.input_tensor
+                elif self.hp.chan:
+                    self.embedded_inputs = self.word_output
                 else:
                     self.embedded_inputs = tf.nn.embedding_lookup(
                         self.embedding_matrix, self.input_tensor
@@ -122,6 +128,7 @@ class HAN(Model):
                     is_training=self.is_training,
                 )
 
+    def set_doc_level(self):
         with tf.variable_scope("doc-level"):
             with tf.variable_scope("reshape"):
                 self.doc_inputs = tf.reshape(
@@ -149,6 +156,7 @@ class HAN(Model):
                     is_training=self.is_training,
                 )
 
+    def set_classifier(self):
         with tf.variable_scope("classifier"):
             try:
                 activation = getattr(tf.nn, self.hp.dense_activation)
@@ -199,6 +207,12 @@ class HAN(Model):
                 if self.hp.multilabel
                 else tf.argmax(self.logits, axis=1)
             )
+
+    def set_logits(self):
+        self.set_lengths()
+        self.set_sentence_level()
+        self.set_doc_level()
+        self.set_classifier()
 
     def set_embedding_matrix(self, emb_matrix=None, vocab_size=None):
         if vocab_size and not emb_matrix:

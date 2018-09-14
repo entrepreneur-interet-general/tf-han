@@ -13,6 +13,7 @@ class DST(Trainer):
         self.padding_values = None
         self.vocab = None
         self.reversed_vocab = None
+        self.lookup_table = None
 
     def extract_words(self, token):
         # Split characters
@@ -41,6 +42,12 @@ class DST(Trainer):
         else:
             self.padding_values = (np.int64(0), np.int64(0))
 
+    def set_lookup_table(self):
+        with tf.variable_scope("vocab-lookup"):
+            self.lookup_table = tf.contrib.lookup.index_table_from_file(
+                self.hp.train_words_file, num_oov_buckets=1
+            )
+
     def make_datasets(self):
         with self.graph.as_default():
             with tf.device("/cpu:0"):
@@ -51,10 +58,7 @@ class DST(Trainer):
                     )
                     self.set_padding_values()
 
-                    with tf.variable_scope("vocab-lookup"):
-                        self.words = tf.contrib.lookup.index_table_from_file(
-                            self.hp.train_words_file, num_oov_buckets=1
-                        )
+                    self.set_lookup_table()
 
                     with tf.variable_scope("train"):
                         train_doc_ds = tf.data.TextLineDataset(self.hp.train_docs_file)

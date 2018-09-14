@@ -14,6 +14,8 @@ from ..models import HAN
 from ..utils.tf_utils import streaming_f1
 from ..utils.utils import EndOfExperiment, thread_eval
 from .base_trainer import BaseTrainer
+from .fast_text_dataset_trainer import FT_DST
+from .dataset_trainer import DST
 
 
 def strtime(ref):
@@ -189,11 +191,23 @@ class Trainer(BaseTrainer):
                 )
 
     @staticmethod
-    def restore(checkpoint_dir, hp_name="", hp_ext="json", simple_save=True):
+    def restore(
+        checkpoint_dir,
+        trainer_type=None,
+        hp_name="",
+        hp_ext="json",
+        simple_save=True,
+        graph=None,
+    ):
         if simple_save:
             checkpoint_dir = Path(checkpoint_dir).resolve()
             hp = HP.load(checkpoint_dir, hp_name, hp_ext)
-            trainer = Trainer("HAN", hp, restored=True)
+            if trainer_type == "DST":
+                trainer = DST("HAN", hp, restored=True, graph=graph)
+            elif trainer_type == "FT_DST":
+                trainer = FT_DST("HAN", hp, restored=True, graph=graph)
+            else:
+                trainer = Trainer("HAN", hp, restored=True, graph=graph)
             tf.saved_model.loader.load(
                 trainer.sess,
                 [tag_constants.SERVING],
@@ -492,7 +506,7 @@ class Trainer(BaseTrainer):
         """
 
         # Validate every n batchs
-        if self.hp.global_step == 0:
+        if (not force) and self.hp.global_step == 0:
             # don't validate on first step eventhough
             # self.hp.global_step% val_every_steps == 0
             return None

@@ -1,6 +1,5 @@
 import datetime
 import json
-import os
 import pickle as pkl
 from pathlib import Path
 
@@ -10,7 +9,7 @@ from ..utils.utils import get_new_dir, is_prop
 path_to_yelp = "/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/"
 
 
-class HP(object):
+class HP():
     @staticmethod
     def from_dict(dic):
         h = HP()
@@ -75,6 +74,7 @@ class HP(object):
         base_dir=None,
         batch_size=64,
         cell_size=5,
+        chan=True,
         decay_steps=10,
         decay_rate=0.99,
         default_name="trainer",
@@ -173,12 +173,15 @@ class HP(object):
         self.version = version
         self.vocab_size = None
         self.max_train_size = None
-        self.max_val_size = None
+        self.max_val_size = max_val_size
         self.ref_labels = ref_labels
         self.ref_labels_delimiter = ref_labels_delimiter
         self.stop_learning = stop_learning
         self.stop_learning_count = stop_learning_count
         self.stop_learning_epoch = stop_learning_epoch
+        self.chan = chan
+
+        assert not (bool(self.chan) and bool(self.fast_text))
 
     def __str__(self):
         """Returns a string representation of the Hyperparameter:
