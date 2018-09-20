@@ -14,22 +14,24 @@ class DST(Trainer):
         self.vocab = None
         self.reversed_vocab = None
         self.lookup_table = None
+        self.padded_shapes = None
 
-    def extract_words(self, token):
+    def extract_words(self, document):
+        # document = list(sentences = str)
         # Split characters
-        out = tf.string_split(token, delimiter=" ")
+        out = tf.string_split(document, delimiter=" ")
         # Convert to Dense tensor, filling with default value
         out = tf.sparse_tensor_to_dense(out, default_value=self.hp.pad_word)
         return out
 
-    def extract_sents(self, string):
+    def extract_sents(self, document_string):
         # Split the document line into sentences
-        return tf.string_split([string], self.hp.split_doc_token).values
+        return tf.string_split([document_string], self.hp.split_doc_token).values
 
     def preprocess_dataset(self, doc_ds, label_ds):
         doc_ds = doc_ds.map(self.extract_sents, self.hp.num_threads)
         doc_ds = doc_ds.map(self.extract_words, self.hp.num_threads)
-        doc_ds = doc_ds.map(self.words.lookup, self.hp.num_threads)
+        doc_ds = doc_ds.map(self.lookup_table.lookup, self.hp.num_threads)
         if self.hp.multilabel:
             label_ds = label_ds.map(one_hot_multi_label, self.hp.num_threads)
         else:
@@ -37,6 +39,7 @@ class DST(Trainer):
         return doc_ds, label_ds
 
     def set_padding_values(self):
+        self.padded_shapes = (tf.TensorShape([None, None]), tf.TensorShape([None]))
         if self.hp.dtype == 32:
             self.padding_values = (np.int64(0), np.int32(0))
         else:
@@ -52,10 +55,7 @@ class DST(Trainer):
         with self.graph.as_default():
             with tf.device("/cpu:0"):
                 with tf.variable_scope("datasets"):
-                    padded_shapes = (
-                        tf.TensorShape([None, None]),
-                        tf.TensorShape([None]),
-                    )
+
                     self.set_padding_values()
 
                     self.set_lookup_table()
@@ -81,7 +81,7 @@ class DST(Trainer):
                             self.hp.max_train_size
                         )
                         self.train_dataset = self.train_dataset.padded_batch(
-                            self.batch_size_ph, padded_shapes, self.padding_values
+                            self.batch_size_ph, self.padded_shapes, self.padding_values
                         )
                         self.train_dataset = self.train_dataset.prefetch(10)
 
@@ -96,7 +96,7 @@ class DST(Trainer):
                         )
                         self.val_dataset = self.val_dataset.take(self.hp.max_val_size)
                         self.val_dataset = self.val_dataset.padded_batch(
-                            self.batch_size_ph, padded_shapes, self.padding_values
+                            self.batch_size_ph, self.padded_shapes, self.padding_values
                         )
                         self.val_dataset = self.val_dataset.prefetch(10)
 

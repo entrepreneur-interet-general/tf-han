@@ -7,6 +7,7 @@ MultiRNNCell = tf.nn.rnn_cell.MultiRNNCell
 
 class CHAN(HAN):
     def __init__(self, hp, is_training, graph=None):
+        self.hp = hp
         self.word_cell_fw = MultiRNNCell(
             [self.get_rnn_cell(is_training) for _ in range(self.hp.rnn_layers)]
         )
@@ -60,13 +61,13 @@ class CHAN(HAN):
                 )
 
             with tf.variable_scope("attention") as scope:
-                self.attended_sentences = task_specific_attention(
-                    self.encoded_sentences, self.hp.cell_size, scope=scope
+                self.attended_words = task_specific_attention(
+                    self.encoded_words, self.hp.cell_size, scope=scope
                 )
 
             with tf.variable_scope("dropout"):
-                self.sentence_output = tf.contrib.layers.dropout(
-                    self.attended_sentences,
+                self.word_output = tf.contrib.layers.dropout(
+                    self.attended_words,
                     keep_prob=self.hp.dropout,
                     is_training=self.is_training,
                 )

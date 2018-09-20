@@ -14,7 +14,9 @@ from sklearn.metrics import f1_score
 
 from .constants import metrics
 from .hyperparameters import HP
-from .trainers import DST, FT_DST
+from .trainers import DST
+from .trainers import FT_DST
+from .trainers import CDST
 from .utils import default_conf
 from .utils.utils import (
     EndOfExperiment,
@@ -123,14 +125,18 @@ class Experiment(object):
         self.dump_conf(self.dir / "conf.yaml")
 
     def setup(self, log=True):
+        hp = HP(base_dir=self.dir)
         if self.conf.trainer_type == "DST":
-            hp = HP(base_dir=self.dir)
             for attr, val in self.conf.hyperparameter.items():
                 if val is not None:
                     setattr(hp, attr, val)
             self.trainer = DST(hp=hp)
+        elif self.conf.trainer_type == "CDST":
+            for attr, val in self.conf.hyperparameter.items():
+                if val is not None:
+                    setattr(hp, attr, val)
+            self.trainer = CDST(hp=hp)
         elif self.conf.trainer_type == "FT_DST":
-            hp = HP(base_dir=self.dir)
             for attr, val in self.conf.hyperparameter.items():
                 if attr != "embedding_dim":
                     if val is not None:

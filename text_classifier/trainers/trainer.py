@@ -11,11 +11,10 @@ from tensorflow.python.saved_model import tag_constants  # pylint: disable=E0611
 
 from ..hyperparameters import HP
 from ..models import HAN
+from ..models import CHAN
 from ..utils.tf_utils import streaming_f1
 from ..utils.utils import EndOfExperiment, thread_eval
 from .base_trainer import BaseTrainer
-from .fast_text_dataset_trainer import FT_DST
-from .dataset_trainer import DST
 
 
 def strtime(ref):
@@ -126,6 +125,8 @@ class Trainer(BaseTrainer):
 
         if self.model_type == "HAN":
             self.model = HAN(self.hp, self.is_training, self.graph)
+        elif self.model_type == "CHAN":
+            self.model = CHAN(self.hp, self.is_training, self.graph)
         elif self.model_type == "reuse" and model:
             self.model = model
         else:
@@ -159,7 +160,12 @@ class Trainer(BaseTrainer):
                 }
                 tf.saved_model.simple_save(  # pylint: disable=E1101
                     self.sess,
-                    str(self.hp.dir / "checkpoints" / "simple"),
+                    str(
+                        self.hp.dir
+                        / "checkpoints"
+                        / "simple"
+                        / str(self.hp.global_step)
+                    ),
                     inputs,
                     outputs,
                 )
@@ -199,6 +205,10 @@ class Trainer(BaseTrainer):
         simple_save=True,
         graph=None,
     ):
+        from .dataset_trainer import DST
+        from .fast_text_dataset_trainer import FT_DST
+        from .char_dataset_trainer import CDST
+
         if simple_save:
             checkpoint_dir = Path(checkpoint_dir).resolve()
             hp = HP.load(checkpoint_dir, hp_name, hp_ext)
@@ -206,6 +216,8 @@ class Trainer(BaseTrainer):
                 trainer = DST("HAN", hp, restored=True, graph=graph)
             elif trainer_type == "FT_DST":
                 trainer = FT_DST("HAN", hp, restored=True, graph=graph)
+            elif trainer_type == "CDST":
+                trainer = CDST("HAN", hp, restored=True, graph=graph)
             else:
                 trainer = Trainer("HAN", hp, restored=True, graph=graph)
             tf.saved_model.loader.load(
@@ -235,7 +247,7 @@ class Trainer(BaseTrainer):
         return trainer
 
     def dump_logits(self, step=None, eval=True):
-        step_string = "_{}".format(step if step is not None else "final")
+        step_string = "_{}".format(step if step else "final")
 
         if self.infered_logits is not None:
             np.save(
@@ -251,19 +263,21 @@ class Trainer(BaseTrainer):
         if eval:
             preds = expit(self.infered_logits)
             ys = self.infered_labels
-
-        thread = threading.Thread(
-            target=thread_eval,
-            args=(
-                ys,
-                preds,
-                self.hp.dir,
-                step,
-                self.hp.ref_labels,
-                self.hp.ref_labels_delimiter,
-            ),
-        )
-        thread.start()
+        try: 
+            thread = threading.Thread(
+                target=thread_eval,
+                args=(
+                    ys,
+                    preds,
+                    self.hp.dir,
+                    step,
+                    self.hp.ref_labels,
+                    self.hp.ref_labels_delimiter,
+                ),
+            )
+            thread.start()
+        except Exception as e:
+            print(e)
 
     def initialize_uninitialized(self):
         with self.graph.as_default():
@@ -657,6 +671,7 @@ class Trainer(BaseTrainer):
                         if val is not None:
                             non_zeros, *metrics = val
                             self.dump_logits(self.hp.global_step)
+                            self.save()
                         else:
                             metrics = None
                         if self.hp.stop_learning:

@@ -100,7 +100,13 @@ class HAN(Model):
             with tf.variable_scope("reshape"):
                 self.embedded_sentences = tf.reshape(
                     self.embedded_inputs,
-                    [self.batch * self.docs, self.sents, self.hp.embedding_dim],
+                    [
+                        self.batch * self.docs,
+                        self.sents,
+                        self.hp.embedding_dim
+                        if not self.hp.chan
+                        else self.hp.cell_size,
+                    ],
                 )
 
                 self.sentence_lengths = tf.reshape(
