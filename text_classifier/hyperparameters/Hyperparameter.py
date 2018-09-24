@@ -9,7 +9,7 @@ from ..utils.utils import get_new_dir, is_prop
 path_to_yelp = "/Users/victor/Documents/Tracfin/dev/han/data/yelp/tf-prepared/"
 
 
-class HP():
+class HP:
     @staticmethod
     def from_dict(dic):
         h = HP()
@@ -70,56 +70,60 @@ class HP():
 
     def __init__(
         self,
-        experiments_dir="./experiments",
         base_dir=None,
         batch_size=64,
         cell_size=5,
         chan=True,
-        decay_steps=10,
         decay_rate=0.99,
+        decay_steps=10,
         default_name="trainer",
-        dense_layers=[128, 128],
         dense_activation="selu",
+        dense_layers=[128, 128],
+        doc_cell_size=None,
+        doc_rnn_layers=None,
         dropout=0.6,
         dtype=32,
-        embedding_file="",
         embedding_dim=100,
+        embedding_file="",
         epochs=20,
-        fast_text=False,
+        experiments_dir="./experiments",
         fast_text_model_file=None,
+        fast_text=False,
         global_step=0,
         learning_rate=5e-3,
         max_grad_norm=5.0,
-        max_words=1e5,
         max_train_size=-1,
         max_val_size=-1,
+        max_words=1e5,
         model_type="HAN",
         multilabel=False,
         num_classes=5,
         num_threads=4,
         pad_word=padding_token,
+        ref_labels_delimiter=": ",
+        ref_labels="",
         restored=False,
         restrict=-1,
         retrained=False,
         rnn_layers=6,
-        ref_labels="",
-        ref_labels_delimiter=": ",
         save_steps=1000,
+        sent_cell_size=None,
+        sent_rnn_layers=None,
         split_doc_token=split_doc_token,
-        stop_learning=True,
         stop_learning_count=1,  # strict, nonzeros < stop_learning_count
         stop_learning_epoch=2,  # stop after first validation in epoch + 1 (start 0)
+        stop_learning=True,
         summary_secs=1000,
-        trainable_embedding_matrix=True,
-        use_bnlstm=True,
-        val_batch_size=1000,
-        val_every_steps=100,
-        version="v2",
-        val_docs_file=path_to_yelp + "sample_0001_val_01/documents.txt",
-        val_labels_file=path_to_yelp + "sample_0001_val_01/labels.txt",
         train_docs_file=path_to_yelp + "sample_0001_train_07/documents.txt",
         train_labels_file=path_to_yelp + "sample_0001_train_07/labels.txt",
         train_words_file=path_to_yelp + "sample_0001_train_07/words.txt",
+        trainable_embedding_matrix=True,
+        use_bnlstm=True,
+        val_batch_size=1000,
+        val_docs_file=path_to_yelp + "sample_0001_val_01/documents.txt",
+        val_every_steps=100,
+        val_labels_file=path_to_yelp + "sample_0001_val_01/labels.txt",
+        version="v2",
     ):
 
         now = datetime.datetime.now()
@@ -180,6 +184,10 @@ class HP():
         self.stop_learning_count = stop_learning_count
         self.stop_learning_epoch = stop_learning_epoch
         self.chan = chan
+        self.doc_cell_size = doc_cell_size
+        self.sent_cell_size = sent_cell_size
+        self.doc_rnn_layers = doc_rnn_layers
+        self.sent_rnn_layers = sent_rnn_layers
 
         assert not (bool(self.chan) and bool(self.fast_text))
 

@@ -9,17 +9,17 @@ MultiRNNCell = tf.nn.rnn_cell.MultiRNNCell
 
 
 class HAN(Model):
-    def get_rnn_cell(self, is_training_ph):
+    def get_rnn_cell(self, is_training_ph, size):
         if is_training_ph is not None and self.hp.use_bnlstm:
-            return BNLSTMCell(self.hp.cell_size, is_training_ph)
+            return BNLSTMCell(size, is_training_ph)
         config = tf.ConfigProto()
         config.gpu_options.allow_growth = True
         with tf.Session(config=config):
             local_device_protos = device_lib.list_local_devices()
             gpus = [x.name for x in local_device_protos if x.device_type == "GPU"]
         if gpus:
-            return tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(self.hp.cell_size)
-        return tf.nn.rnn_cell.GRUCell(self.hp.cell_size)
+            return tf.contrib.cudnn_rnn.CudnnCompatibleGRUCell(size)
+        return tf.nn.rnn_cell.GRUCell(size)
 
     def __init__(self, hp, is_training, graph=None):
         super().__init__(hp, graph)
@@ -28,17 +28,50 @@ class HAN(Model):
         self.batch = None
         self.docs = None
         self.sents = None
+
+        if not isinstance(self.hp.sent_rnn_layers, list):
+            if not (
+                self.hp.sent_rnn_layers is None
+                or isinstance(self.hp.sent_rnn_layers, int)
+            ):
+                raise TypeError(
+                    "hp.sent_rnn_layers should be list int or None but got {}".format(
+                        "{} of type {}".format(
+                            self.hp.sent_rnn_layers, type(self.hp.sent_rnn_layers)
+                        )
+                    )
+                )
+            self.hp.sent_rnn_layers = [self.hp.sent_cell_size or self.hp.cell_size] * (
+                self.hp.sent_rnn_layers or self.hp.rnn_layers
+            )
+
+        if not isinstance(self.hp.doc_rnn_layers, list):
+            if not (
+                self.hp.doc_rnn_layers is None
+                or isinstance(self.hp.doc_rnn_layers, int)
+            ):
+                raise TypeError(
+                    "hp.doc_rnn_layers should be list int or None but got {}".format(
+                        "{} of type {}".format(
+                            self.hp.doc_rnn_layers, type(self.hp.doc_rnn_layers)
+                        )
+                    )
+                )
+            self.hp.doc_rnn_layers = [self.hp.doc_cell_size or self.hp.cell_size] * (
+                self.hp.doc_rnn_layers or self.hp.rnn_layers
+            )
+
         self.sent_cell_fw = MultiRNNCell(
-            [self.get_rnn_cell(is_training) for _ in range(self.hp.rnn_layers)]
+            [self.get_rnn_cell(is_training, s) for s in self.hp.sent_rnn_layers]
         )
         self.sent_cell_bw = MultiRNNCell(
-            [self.get_rnn_cell(is_training) for _ in range(self.hp.rnn_layers)]
+            [self.get_rnn_cell(is_training, s) for s in self.hp.sent_rnn_layers]
         )
         self.doc_cell_fw = MultiRNNCell(
-            [self.get_rnn_cell(is_training) for _ in range(self.hp.rnn_layers)]
+            [self.get_rnn_cell(is_training, s) for s in self.hp.doc_rnn_layers]
         )
         self.doc_cell_bw = MultiRNNCell(
-            [self.get_rnn_cell(is_training) for _ in range(self.hp.rnn_layers)]
+            [self.get_rnn_cell(is_training, s) for s in self.hp.doc_rnn_layers]
         )
         self.is_training = is_training
 
