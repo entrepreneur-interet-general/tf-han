@@ -32,12 +32,28 @@ An `experiment` runs various trainers with various hyper parameters.
 
 All these classes have an `hp` attribute which represents their hyperparameters.
 
+### Available classes
+
+
 ### Configuring an experiment
 
 All (hyper) parameters can be defined in a `yaml` configuration file. List of parameters and their values can be found there: [**parameters.md**](/parameters.md).
 
-A default configuration file is provided -> [default_conf.yaml](/default_conf.yaml)
+A default configuration file is provided -> [default_conf.yaml](/default_conf.yaml).
 
+The idea is to have two separate sets of parameters:
+
+* Fixed parameters like the source of data, the type of `trainer` or `model` or anything you want to keep constant across trainers during an experiment
+* Randomizable parameters like the `batch_size` or `layers` or `optimizer` or `learning_rate` or anything you want to change between trainers
+
+#### Randomizable parameters
+
+They can be randomized in a few ways:
+
+* From a `range` or from a `list` of values
+* Sampled according a `uniform`, `normal` or `deterministic` (in the order of the range or list) distribution.
+
+### Data format
 
 ### Running an Experiment
 ```
