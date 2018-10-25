@@ -6,12 +6,12 @@ from random import normalvariate
 from types import ModuleType
 
 import matplotlib
+import numpy as np
+from sklearn.metrics import f1_score
 
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
-import numpy as np
-from sklearn.metrics import f1_score
 
 
 def _reload(module, top_level_name):
@@ -200,7 +200,7 @@ def thread_eval(ys, preds, directory, step, ref_labels, ref_labels_delimiter):
         ax.set_title(av)
     st.set_y(0.95)
     fig.subplots_adjust(top=0.85)
-    fig.savefig(directory / "logits_metrics{}.png".format(step_string), dpi=360)
+    fig.savefig(str(directory / "logits_metrics{}.png".format(step_string)), dpi=360)
 
     labels = {}
     with open(ref_labels, "r") as f:
@@ -218,8 +218,10 @@ def thread_eval(ys, preds, directory, step, ref_labels, ref_labels_delimiter):
         plt.xticks(x, [labels[k] for k in indexes], rotation="vertical")
         plt.tight_layout()
         plt.savefig(
-            directory
-            / "logits_metrics_perclass_{:.3f}{}.png".format(threshold, step_string),
+            str(
+                directory
+                / "logits_metrics_perclass_{:.3f}{}.png".format(threshold, step_string)
+            ),
             dpi=360,
         )
         plt.close()

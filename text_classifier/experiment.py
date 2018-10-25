@@ -90,13 +90,16 @@ class Experiment(object):
                     value = normal_choice(values)
                 elif p.distribution == "uniform":
                     value = uniform_choice(values)
-                elif p.distribution == "deterministic":
+                else:
+                    # p.distribution == "deterministic"
                     value = values[self.current_run % len(values)]
 
             setattr(self.trainer.hp, p_name, value.tolist())
             self.summary["params"][p_name].append(value)
             if verbose > 0:
                 print("{:20}: {:10}".format(p_name, value))
+        if verbose > 0:
+            print("{:20}: {:10}".format("trainer.hp.dir", self.trainer.hp.dir))
 
     def dump_conf(self, path):
         stringified = []
@@ -156,12 +159,12 @@ class Experiment(object):
             self.tee = Tee(str(self.trainer.hp.dir / "log.txt"))
             sys.stdout = self.tee
 
-    def reset(self):
+    def reset(self, verbose=0):
         self.setup()
-        self.randomize()
+        self.randomize(verbose)
 
     def delete(self):
-        shutil.rmtree(self.dir)
+        shutil.rmtree(self.dir, ignore_errors=True)
 
     def update_metrics(self, metrics):
         if metrics is None:
@@ -227,7 +230,7 @@ class Experiment(object):
 
             self.current_run += 1
             if self.current_run < n_runs:
-                self.reset()
+                self.reset(verbose)
             # End of run
         # End of all runs
         self.summary["other"]["interrupting"] = "Done: all runs performed."
