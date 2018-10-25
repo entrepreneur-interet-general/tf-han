@@ -9,3 +9,4 @@ experiments/
 *.zip
 *.pytest_cache
 .coverage
+tmp/
